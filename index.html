@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no" />
+  <meta name="theme-color" content="#07111c" />
+  <meta name="description" content="Marble Merge Grand Prix — a cinematic 3D physics-inspired marble race." />
+  <title>Marble Merge Grand Prix</title>
+  <link rel="stylesheet" href="./styles.css" />
+  <script type="importmap">
+    {
+      "imports": {
+        "three": "https://cdn.jsdelivr.net/npm/three@0.180.0/build/three.module.js",
+        "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.180.0/examples/jsm/"
+      }
+    }
+  </script>
+</head>
+<body>
+  <main id="app">
+    <div id="viewport" aria-label="3D marble race"></div>
+    <div id="vignette"></div>
+    <div id="onboard-glass" aria-hidden="true"><div class="glass-spin"></div></div>
+
+    <header class="topbar">
+      <div class="brand">
+        <div class="brand-mark"><span></span><span></span><span></span></div>
+        <div>
+          <div class="eyebrow">HAMBONE ARCADE / LIVE PHYSICS</div>
+          <h1>MARBLE<span>MERGE</span></h1>
+        </div>
+        <div class="brand-tag">GRAND PRIX</div>
+      </div>
+      <div class="race-stats">
+        <div class="stat"><span>RACE CLOCK</span><strong id="time">00:00.0</strong></div>
+        <div class="stat"><span>RACING</span><strong id="alive">32</strong></div>
+        <div class="stat"><span>MERGES</span><strong id="merges">0</strong></div>
+      </div>
+    </header>
+
+    <aside class="leaderboard panel">
+      <div class="panel-heading"><span class="live-dot"></span><strong>LIVE STANDINGS</strong><small>POSITION</small></div>
+      <div id="leader-list" class="leader-list"></div>
+      <div class="legend"><span class="legend-dot"></span> Tap a racer to follow</div>
+    </aside>
+
+    <section class="race-callout" id="race-callout" aria-live="polite">
+      <span class="callout-label">NOW RACING</span>
+      <strong id="callout-title">The glass circuit</strong>
+      <span id="callout-subtitle">Matching numbers combine. First across wins.</span>
+    </section>
+
+    <div class="race-toast" id="race-toast" aria-live="polite"></div>
+
+    <footer class="control-deck panel">
+      <div class="control-group colors">
+        <div class="control-name">YOUR MARBLE <span id="selected-label">RED</span></div>
+        <div id="color-choices" class="color-choices" aria-label="Choose a marble color"></div>
+      </div>
+      <div class="control-group camera-group">
+        <div class="control-name">CAMERA</div>
+        <div class="camera-options" role="group" aria-label="Camera mode">
+          <button class="camera-btn active" data-camera="chase">FOLLOW</button>
+          <button class="camera-btn" data-camera="onboard">INSIDE BALL</button>
+          <button class="camera-btn" data-camera="aerial">AERIAL</button>
+        </div>
+      </div>
+      <div class="transport">
+        <button id="speed-btn" class="utility-btn" aria-label="Toggle race simulation speed">1×</button>
+        <button id="reset-btn" class="utility-btn" aria-label="Restart race">↻</button>
+        <button id="play-btn" class="play-btn">Ⅱ <span>PAUSE</span></button>
+      </div>
+    </footer>
+    <div class="bottom-note">PROTOTYPE 01 <span>•</span> AUTOMATIC RACING <span>•</span> DESIGNED FOR 60-SECOND FINISHES</div>
+    <div class="loading" id="loading"><div class="loader-orb"></div><strong>BUILDING THE CIRCUIT</strong><span>Preparing your marbles…</span></div>
+  </main>
+  <script type="module" src="./src/game.js"></script>
+</body>
+</html>
