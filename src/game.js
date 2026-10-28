@@ -43,7 +43,15 @@ const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x071421);
 scene.fog = new THREE.FogExp2(0x0c2639, 0.0043);
 const camera = new THREE.PerspectiveCamera(57, 1, 0.035, 750);
-const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false, powerPreference: 'high-performance' });
+let renderer;
+try {
+  renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false, powerPreference: 'high-performance' });
+} catch (error) {
+  loading.innerHTML = '<div class="loader-orb"></div><strong>3D GRAPHICS UNAVAILABLE</strong><span>This browser could not start WebGL. Try Safari or Chrome on a device with WebGL enabled.</span>';
+  loading.style.padding = '24px';
+  loading.style.textAlign = 'center';
+  throw error;
+}
 renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.65));
 renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.outputColorSpace = THREE.SRGBColorSpace;
