@@ -12,7 +12,6 @@ const TRACK_SAMPLES = 1250;
 const MAX_RACE_SECONDS = 155;
 const TWO_PI = Math.PI * 2;
 const TROUGH_HALF_ANGLE = Math.PI / 4;
-const TROUGH_RADIUS = TRACK_WIDTH / (2 * Math.sin(TROUGH_HALF_ANGLE));
 const TROUGH_SEGMENTS = 18;
 const IDENTITIES = [
   { name: 'RED', hex: 0xff6077 },
@@ -99,15 +98,65 @@ for (let i = 1; i < roomCourseXZ.length; i++) {
 const totalPlanDistance = courseDistances.at(-1);
 const curve = new THREE.CatmullRomCurve3(roomCourseXZ.map(([x, z], i) => {
   const percent = courseDistances[i] / totalPlanDistance;
-  return new THREE.Vector3(x, 125 - percent * 117, z);
+  return new THREE.Vector3(x, 125 - percent * 93, z);
 }), false, 'centripetal');
 const trackLength = curve.getLength();
+const FEATURE_BELLS = [0.15, 0.60].map((fraction, id) => ({ id, s: trackLength * fraction, spread: 15 }));
+const FEATURE_DROPS = [0.22, 0.51, 0.81].map((fraction, id) => ({ id, fraction, s: trackLength * fraction }));
+const FEATURE_WHEELS = [0.29, 0.76].map((fraction, id) => ({ id, s: trackLength * fraction, speed: id ? -1.28 : 1.55 }));
+const FEATURE_SPINNERS = [0.45, 0.91].map((fraction, id) => ({ id, s: trackLength * fraction, speed: id ? -2.2 : 1.85 }));
+const FEATURE_SPLITS = [[0.355, 0.412], [0.675, 0.725]].map(([start, end], id) => ({
+  id, start: trackLength * start, end: trackLength * end
+}));
+const FEATURE_MILESTONES = [
+  ...FEATURE_BELLS.map(item => ({ s: item.s, name: 'INVERTED BELL', color: '#eac779' })),
+  ...FEATURE_DROPS.map(item => ({ s: item.s, name: 'STEEP DROP', color: '#ff9a6a' })),
+  ...FEATURE_WHEELS.map(item => ({ s: item.s, name: 'ROLLING WHEEL', color: '#edc47b' })),
+  ...FEATURE_SPINNERS.map(item => ({ s: item.s, name: 'PADDLE SPINNER', color: '#f67c61' })),
+  ...FEATURE_SPLITS.map(item => ({ s: item.start, name: 'SPLIT PATHS', color: '#77dfe7' }))
+].sort((a, b) => a.s - b.s);
+for (const feature of FEATURE_MILESTONES) {
+  const marker = document.createElement('span');
+  marker.className = 'progress-feature';
+  marker.style.left = `${(feature.s / trackLength * 100).toFixed(3)}%`;
+  marker.style.setProperty('--feature-color', feature.color);
+  marker.title = `${feature.name} · ${Math.round(feature.s / trackLength * 100)}% of track`;
+  document.querySelector('#progress-line').appendChild(marker);
+}
+const smoothstep = value => {
+  const n = THREE.MathUtils.clamp(value, 0, 1);
+  return n * n * (3 - 2 * n);
+};
+function dropProfile(u) {
+  return FEATURE_DROPS.reduce((height, drop) =>
+    height + 8 * smoothstep((u - drop.fraction + 0.011) / 0.022), 0);
+}
+function trackPointAt(u) {
+  const p = curve.getPointAt(THREE.MathUtils.clamp(u, 0, 1));
+  p.y -= dropProfile(u);
+  return p;
+}
+function troughProfile(s) {
+  let bell = 0;
+  for (const feature of FEATURE_BELLS) {
+    const scaled = (s - feature.s) / feature.spread;
+    bell = Math.max(bell, Math.exp(-scaled * scaled * 1.8));
+  }
+  const width = TRACK_WIDTH + bell * 3.55;
+  return {
+    width,
+    radius: width / (2 * Math.sin(TROUGH_HALF_ANGLE)),
+    dip: bell * 2.25,
+    bell
+  };
+}
 const track = [];
 const UP = new THREE.Vector3(0, 1, 0);
 for (let i = 0; i <= TRACK_SAMPLES; i++) {
   const u = i / TRACK_SAMPLES;
-  const point = curve.getPointAt(u);
-  const tangent = curve.getTangentAt(u).normalize();
+  const point = trackPointAt(u);
+  const tangent = trackPointAt(u + 1 / TRACK_SAMPLES)
+    .sub(trackPointAt(u - 1 / TRACK_SAMPLES)).normalize();
   const normal = new THREE.Vector3(-tangent.z, 0, tangent.x).normalize();
   track.push({ point, tangent, normal });
 }
@@ -128,22 +177,24 @@ function frameAt(s) {
   };
 }
 
-function troughHeight(lane) {
-  const x = THREE.MathUtils.clamp(lane, -TRACK_WIDTH / 2, TRACK_WIDTH / 2);
-  return TROUGH_RADIUS - Math.sqrt(Math.max(0, TROUGH_RADIUS * TROUGH_RADIUS - x * x));
+function troughHeight(s, lane) {
+  const profile = troughProfile(s);
+  const x = THREE.MathUtils.clamp(lane, -profile.width / 2, profile.width / 2);
+  return profile.radius - Math.sqrt(Math.max(0, profile.radius * profile.radius - x * x)) - profile.dip;
 }
 
 function worldAt(s, lane, height = 0) {
   const frame = frameAt(s);
-  return frame.point.addScaledVector(frame.normal, lane).addScaledVector(UP, troughHeight(lane) + height);
+  return frame.point.addScaledVector(frame.normal, lane).addScaledVector(UP, troughHeight(s, lane) + height);
 }
 
 function marbleCenterAt(s, lane, radius) {
   // A sphere resting against the inner wall of a circular channel is offset
   // along the wall normal; its center follows a concentric arc of radius R-r.
-  const centerRadius = Math.max(0.75, TROUGH_RADIUS - radius);
+  const profile = troughProfile(s);
+  const centerRadius = Math.max(0.75, profile.radius - radius);
   const x = THREE.MathUtils.clamp(lane, -centerRadius * Math.sin(TROUGH_HALF_ANGLE), centerRadius * Math.sin(TROUGH_HALF_ANGLE));
-  const height = TROUGH_RADIUS - Math.sqrt(Math.max(0, centerRadius * centerRadius - x * x));
+  const height = profile.radius - Math.sqrt(Math.max(0, centerRadius * centerRadius - x * x)) - profile.dip;
   const frame = frameAt(s);
   return frame.point.addScaledVector(frame.normal, x).addScaledVector(UP, height - 0.07);
 }
@@ -209,10 +260,12 @@ const surfaceUvs = [];
 const rowSize = TROUGH_SEGMENTS + 1;
 for (let i = 0; i <= TRACK_SAMPLES; i++) {
   const f = track[i];
+  const s = i / TRACK_SAMPLES * trackLength;
+  const profile = troughProfile(s);
   for (let j = 0; j <= TROUGH_SEGMENTS; j++) {
     const angle = -TROUGH_HALF_ANGLE + j / TROUGH_SEGMENTS * (2 * TROUGH_HALF_ANGLE);
-    const lateral = TROUGH_RADIUS * Math.sin(angle);
-    const rise = TROUGH_RADIUS * (1 - Math.cos(angle));
+    const lateral = profile.radius * Math.sin(angle);
+    const rise = profile.radius * (1 - Math.cos(angle)) - profile.dip;
     const point = f.point.clone().addScaledVector(f.normal, lateral);
     topPositions.push(point.x, point.y + rise - 0.1, point.z);
     bottomPositions.push(point.x, point.y + rise - 0.38, point.z);
@@ -243,21 +296,23 @@ const surface = new THREE.Mesh(stripGeometry(topPositions), new THREE.MeshPhysic
 }));
 trackGroup.add(surface);
 
-function pathTube(offset, height, radius, material) {
+function pathTube(offset, height, radius, material, followOuterLip = false) {
   const points = [];
   for (let i = 0; i <= TRACK_SAMPLES; i += 3) {
-    const f = track[i];
-    points.push(f.point.clone().addScaledVector(f.normal, offset).addScaledVector(UP, troughHeight(offset) + height));
+    const s = i / TRACK_SAMPLES * trackLength;
+    const lateral = followOuterLip ? Math.sign(offset) * (troughProfile(s).width / 2 + 0.04) : offset;
+    points.push(worldAt(s, lateral, height));
   }
-  points.push(worldAt(trackLength, offset, height));
+  const lastOffset = followOuterLip ? Math.sign(offset) * (troughProfile(trackLength).width / 2 + 0.04) : offset;
+  points.push(worldAt(trackLength, lastOffset, height));
   const path = new THREE.CatmullRomCurve3(points);
   return new THREE.Mesh(new THREE.TubeGeometry(path, Math.min(1500, Math.ceil(trackLength * 1.3)), radius, 5, false), material);
 }
 const railMaterial = new THREE.MeshPhysicalMaterial({ color: 0x6c3820, metalness: 0, roughness: 0.3, clearcoat: 0.75 });
 const railHighlight = new THREE.MeshStandardMaterial({ color: 0xdca76a, metalness: 0.15, roughness: 0.32 });
 for (const side of [-1, 1]) {
-  trackGroup.add(pathTube(side * (TRACK_WIDTH / 2 + 0.04), 0.08, 0.12, railMaterial));
-  trackGroup.add(pathTube(side * (TRACK_WIDTH / 2 + 0.04), 0.15, 0.036, railHighlight));
+  trackGroup.add(pathTube(side * (TRACK_WIDTH / 2 + 0.04), 0.08, 0.12, railMaterial, true));
+  trackGroup.add(pathTube(side * (TRACK_WIDTH / 2 + 0.04), 0.15, 0.036, railHighlight, true));
 }
 
 // No center groove or parallel dividing strips: this is one uninterrupted
@@ -385,9 +440,135 @@ for (let s = 12; s < trackLength; s += 24) {
   }
 }
 
+// Individual race modules: widened inverted-bell catch bowls, hinged-feeling
+// drop chutes, spinning wheels, paddle rotors and two-way fork guide sections.
+const brass = new THREE.MeshStandardMaterial({ color: 0xd9ad5c, metalness: 0.73, roughness: 0.25 });
+const bronze = new THREE.MeshStandardMaterial({ color: 0x725438, metalness: 0.48, roughness: 0.37 });
+const paddleMaterial = new THREE.MeshPhysicalMaterial({ color: 0xc77747, metalness: 0.15, roughness: 0.3, clearcoat: 0.7 });
+const mechanismRotors = [];
+
+function featureSign(s, text, color) {
+  const canvas = document.createElement('canvas');
+  canvas.width = 512;
+  canvas.height = 128;
+  const context = canvas.getContext('2d');
+  context.fillStyle = '#36251b';
+  context.fillRect(7, 8, 498, 111);
+  context.strokeStyle = `#${color.toString(16).padStart(6, '0')}`;
+  context.lineWidth = 9;
+  context.strokeRect(11, 12, 490, 103);
+  context.fillStyle = '#fff4da';
+  context.textAlign = 'center';
+  context.textBaseline = 'middle';
+  context.font = '900 57px Arial, sans-serif';
+  context.fillText(text, 256, 68);
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.colorSpace = THREE.SRGBColorSpace;
+  const sign = new THREE.Sprite(new THREE.SpriteMaterial({ map: texture, transparent: true, depthWrite: false }));
+  sign.position.copy(worldAt(s, 0, 6.1));
+  sign.scale.set(5.8, 1.45, 1);
+  trackGroup.add(sign);
+}
+
+function crossSectionTrim(s, material, thickness) {
+  const points = [];
+  const profile = troughProfile(s);
+  for (let j = 0; j <= TROUGH_SEGMENTS; j++) {
+    points.push(worldAt(s, (j / TROUGH_SEGMENTS - 0.5) * profile.width, 0.015));
+  }
+  const path = new THREE.CatmullRomCurve3(points);
+  trackGroup.add(new THREE.Mesh(new THREE.TubeGeometry(path, 36, thickness, 6, false), material));
+}
+
+for (const bell of FEATURE_BELLS) {
+  crossSectionTrim(bell.s - 12, brass, 0.11);
+  crossSectionTrim(bell.s + 12, brass, 0.11);
+  const ring = new THREE.Mesh(new THREE.TorusGeometry(1.2, 0.12, 7, 48), brass);
+  ring.position.copy(worldAt(bell.s, 0, -0.35));
+  ring.rotation.x = -Math.PI / 2;
+  trackGroup.add(ring);
+  featureSign(bell.s - 18, 'INVERTED BELL', 0xe2b75e);
+}
+
+for (const drop of FEATURE_DROPS) {
+  crossSectionTrim(drop.s - 12, paddleMaterial, 0.13);
+  crossSectionTrim(drop.s + 12, paddleMaterial, 0.13);
+  featureSign(drop.s - 15, 'STEEP DROP', 0xf28a56);
+}
+
+for (const wheel of FEATURE_WHEELS) {
+  const mount = new THREE.Group();
+  mount.position.copy(worldAt(wheel.s, 0, 2.6));
+  mount.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), frameAt(wheel.s).tangent);
+  const rotor = new THREE.Group();
+  mount.add(rotor);
+  rotor.add(new THREE.Mesh(new THREE.TorusGeometry(2.4, 0.2, 10, 48), brass));
+  rotor.add(new THREE.Mesh(new THREE.TorusGeometry(1.95, 0.06, 7, 48), bronze));
+  for (let arm = 0; arm < 6; arm++) {
+    const spoke = new THREE.Mesh(new THREE.BoxGeometry(0.17, 4.55, 0.24), arm % 2 ? bronze : brass);
+    spoke.rotation.z = arm * Math.PI / 6;
+    rotor.add(spoke);
+  }
+  const axle = new THREE.Mesh(new THREE.CylinderGeometry(0.41, 0.41, 0.75, 20), paddleMaterial);
+  axle.rotation.x = Math.PI / 2;
+  rotor.add(axle);
+  trackGroup.add(mount);
+  mechanismRotors.push({ type: 'wheel', feature: wheel, rotor });
+  featureSign(wheel.s - 15, 'ROLLING WHEEL', 0xe2b75e);
+}
+
+for (const spinner of FEATURE_SPINNERS) {
+  const mount = new THREE.Group();
+  mount.position.copy(worldAt(spinner.s, 0, 1.05));
+  const rotor = new THREE.Group();
+  mount.add(rotor);
+  for (let arm = 0; arm < 4; arm++) {
+    const spoke = new THREE.Group();
+    spoke.rotation.y = arm * Math.PI / 2;
+    const paddle = new THREE.Mesh(new THREE.BoxGeometry(2.35, 0.28, 0.55), paddleMaterial);
+    paddle.position.x = 1.18;
+    spoke.add(paddle);
+    rotor.add(spoke);
+  }
+  const cap = new THREE.Mesh(new THREE.CylinderGeometry(0.36, 0.36, 0.65, 16), brass);
+  rotor.add(cap);
+  trackGroup.add(mount);
+  mechanismRotors.push({ type: 'spinner', feature: spinner, rotor });
+  featureSign(spinner.s - 14, 'PADDLE SPINNER', 0xf28a56);
+}
+
+for (const split of FEATURE_SPLITS) {
+  const ridgePoints = [];
+  const leftGuide = [];
+  const rightGuide = [];
+  for (let j = 0; j <= 30; j++) {
+    const t = j / 30;
+    const s = split.start + t * (split.end - split.start);
+    const rise = 0.06 + 0.75 * Math.sin(Math.PI * t) ** 0.55;
+    ridgePoints.push(worldAt(s, 0, rise));
+    leftGuide.push(worldAt(s, -1.65, 0.035));
+    rightGuide.push(worldAt(s, 1.65, 0.035));
+  }
+  trackGroup.add(new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(ridgePoints), 70, 0.21, 8, false), darkOak));
+  for (const guide of [leftGuide, rightGuide]) {
+    trackGroup.add(new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(guide), 70, 0.055, 6, false), brass));
+  }
+  featureSign(split.start - 12, 'SPLIT PATHS', 0x86d7dc);
+}
+
+function updateMechanisms() {
+  for (const mechanism of mechanismRotors) {
+    const phase = raceTime * mechanism.feature.speed + mechanism.feature.id * 0.93;
+    if (mechanism.type === 'wheel') mechanism.rotor.rotation.z = phase;
+    else mechanism.rotor.rotation.y = phase;
+  }
+}
+
 const obstacles = [];
 const obstacleMaterial = new THREE.MeshPhysicalMaterial({ color: 0x844b2e, metalness: 0.03, roughness: 0.34, clearcoat: 0.65 });
-for (let s = 38, i = 0; s < trackLength - 30; s += 56, i++) {
+for (let s = 38, i = 0; s < trackLength - 30; s += 83, i++) {
+  if ([...FEATURE_BELLS, ...FEATURE_WHEELS, ...FEATURE_SPINNERS, ...FEATURE_DROPS]
+    .some(feature => Math.abs(feature.s - s) < 20) || FEATURE_SPLITS.some(split => s > split.start - 7 && s < split.end + 7)) continue;
   const lane = ([-1.6, 1.7, 0.2, -2.15, 1.1, 0.0][i % 6]);
   const radius = i % 4 === 0 ? 0.63 : 0.42;
   obstacles.push({ s, lane, radius, lastHits: new Map() });
@@ -568,6 +749,7 @@ function createRacers() {
       bias: rand() * TWO_PI, roll: rand() * TWO_PI,
       alive: true, finished: false, finishTime: null,
       lastObstacle: -1, lastObstacleTime: -100,
+      lastFeatureHit: Object.create(null), forkSelections: Object.create(null),
       group: null, spin: null, shell: null, number: null,
       lastRenderedPosition: null
     };
@@ -653,6 +835,8 @@ function resolveMarbleCollisions() {
     for (let j = i + 1; j < active.length; j++) {
       const b = active[j];
       if (!b.alive || Math.abs(a.s - b.s) > a.radius + b.radius + 0.13) continue;
+      const fork = FEATURE_SPLITS.find(split => (a.s + b.s) / 2 > split.start + 5 && (a.s + b.s) / 2 < split.end - 5);
+      if (fork && a.lane * b.lane < 0) continue;
       const dx = b.s - a.s;
       const dz = b.lane - a.lane;
       const minDist = a.radius + b.radius;
@@ -690,13 +874,17 @@ function updateRacer(r, dt) {
   r.prevLane = r.lane;
   if (!r.alive || r.finished) return;
   const frame = frameAt(r.s);
-  const downhill = -frame.tangent.y;
+  // A flared catch bell dips below the ordinary chute; its entrance adds
+  // downhill acceleration and its exit naturally costs that potential energy.
+  const bellSlope = (troughProfile(r.s + 0.75).dip - troughProfile(r.s - 0.75).dip) / 1.5;
+  const downhill = -frame.tangent.y + bellSlope;
   const acceleration = 1.9 + 21 * downhill - r.drag * r.v * Math.abs(r.v);
   r.v += acceleration * dt;
   r.v = THREE.MathUtils.clamp(r.v, 1.3, 18.5);
   // Gravity restores marbles toward the bottom of the 90-degree circular
   // trough. Curvature and small individual variations keep the pack dynamic.
-  const centerRadius = Math.max(0.75, TROUGH_RADIUS - r.radius);
+  const profile = troughProfile(r.s);
+  const centerRadius = Math.max(0.75, profile.radius - r.radius);
   const centeredLane = THREE.MathUtils.clamp(r.lane, -centerRadius * 0.707, centerRadius * 0.707);
   const lateralGravity = -(5 / 7) * 12.5 * centeredLane * Math.sqrt(Math.max(0, centerRadius * centerRadius - centeredLane * centeredLane)) / (centerRadius * centerRadius);
   const forwardTangent = frameAt(r.s + 1.5).tangent;
@@ -707,9 +895,39 @@ function updateRacer(r, dt) {
   r.vl += (lateralGravity + curvePush * 0.55 + mildVariation - r.vl * 1.45) * dt;
   r.s += r.v * dt;
   r.lane += r.vl * dt;
-  const limit = Math.max(0.15, (TROUGH_RADIUS - r.radius) * Math.sin(TROUGH_HALF_ANGLE) - 0.06);
+  const limit = Math.max(0.15, (troughProfile(r.s).radius - r.radius) * Math.sin(TROUGH_HALF_ANGLE) - 0.06);
   if (r.lane > limit) { r.lane = limit; r.vl = -Math.abs(r.vl) * 0.48; r.v *= 0.993; }
   if (r.lane < -limit) { r.lane = -limit; r.vl = Math.abs(r.vl) * 0.48; r.v *= 0.993; }
+  for (const split of FEATURE_SPLITS) {
+    if (r.s < split.start - 2 || r.s > split.end + 2) continue;
+    if (!r.forkSelections[split.id]) {
+      r.forkSelections[split.id] = r.lane > 0.08 ? 1 : r.lane < -0.08 ? -1 : (r.bias > Math.PI ? 1 : -1);
+    }
+    const side = r.forkSelections[split.id];
+    const entrance = smoothstep((r.s - split.start) / 7);
+    const exit = smoothstep((split.end - r.s) / 7);
+    const clearance = (r.radius + 0.24) * entrance * exit;
+    if (r.lane * side < clearance) {
+      r.lane = side * clearance;
+      // Remove only velocity into the divider; do not inject a repeated
+      // outward kick that would make a marble jitter against the guide.
+      r.vl = side * Math.max(0, r.vl * side) * 0.45;
+    }
+  }
+  for (const mechanism of mechanismRotors) {
+    const feature = mechanism.feature;
+    if (Math.abs(r.s - feature.s) > r.radius + 0.7) continue;
+    const key = `${mechanism.type}-${feature.id}`;
+    if (raceTime - (r.lastFeatureHit[key] ?? -100) < 0.48) continue;
+    const phase = raceTime * feature.speed + feature.id * 0.93 + r.lane * 0.65;
+    const strike = Math.sin(phase);
+    if (Math.abs(strike) < 0.23) continue;
+    r.lastFeatureHit[key] = raceTime;
+    const impulse = (mechanism.type === 'spinner' ? 4.2 : 2.75) / Math.sqrt(r.mass);
+    r.vl += Math.sign(strike) * impulse;
+    r.v *= mechanism.type === 'spinner' ? 0.76 : 0.84;
+    r.s += 0.06;
+  }
   for (let k = 0; k < obstacles.length; k++) {
     const o = obstacles[k];
     if (Math.abs(o.s - r.s) > r.radius + o.radius + 0.25) continue;
@@ -792,7 +1010,7 @@ function updateMarbleMeshes(dt, alpha) {
     rollPosition.copy(marbleCenterAt(s, lane, racer.visibleRadius));
     if (racer.lastRenderedPosition) {
       const frame = frameAt(s);
-      const centerRadius = Math.max(0.75, TROUGH_RADIUS - racer.visibleRadius);
+      const centerRadius = Math.max(0.75, troughProfile(s).radius - racer.visibleRadius);
       const laneAngle = Math.asin(THREE.MathUtils.clamp(lane / centerRadius,
         -Math.sin(TROUGH_HALF_ANGLE), Math.sin(TROUGH_HALF_ANGLE)));
       rollSide.copy(frame.normal).multiplyScalar(Math.cos(laneAngle))
@@ -884,6 +1102,12 @@ function updateHud() {
   const leader = leaders[0];
   const selected = selectedRacer();
   const completion = racer => Math.round(THREE.MathUtils.clamp(racer.s / (trackLength - 2) * 100, 0, 100));
+  if (selected && raceStatus !== 'finished') {
+    const upcoming = FEATURE_MILESTONES.find(feature => feature.s > selected.s + 1);
+    calloutSubtitle.textContent = upcoming
+      ? `NEXT: ${upcoming.name} · ${Math.round(upcoming.s - selected.s)} units ahead`
+      : 'FINAL RUN TO THE CENTER FINISH';
+  }
   progressLeader.textContent = leader ? `LEADER ${leader.identity.name} · ${completion(leader)}%` : 'NO MARBLES';
   progressCurrent.textContent = selected ? `FOLLOWING ${selected.identity.name} · ${completion(selected)}%` : '';
   for (const racer of racers) {
@@ -991,6 +1215,7 @@ function animate(now) {
   updateMarbleMeshes(elapsed, renderAlpha);
   updateProgressMarkers(renderAlpha);
   updateParticles(elapsed);
+  updateMechanisms();
   updateCamera(elapsed);
   if (now - lastHudTime > 150) { updateHud(); lastHudTime = now; }
   if (toastUntil && now > toastUntil) {

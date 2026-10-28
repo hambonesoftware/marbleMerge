@@ -10,7 +10,19 @@ A glossy 3D marble race down a long polished wooden trough, built using [Three.j
 - Select a color or tap a miniature marble on the horizontal progress tracker to change the followed marble. The tracker shows every surviving marble's actual percentage of the course.
 - Pause/resume, replay, and 2× simulation speed controls are provided.
 
-The first racer across the finish line wins. The downhill course runs approximately 859 units in plan and drops 117 units. It traces the outer walls of an enclosed wooden race hall, then makes progressively smaller turns toward the center of the room. The hall includes plaster walls, wood paneling, framed windows, ceiling beams, lighting fixtures, a wood floor, and track brackets and posts. The track has a 5.8-unit-wide, smoothly curved cross section describing the **bottom quarter of a circle** (90 degrees total, from -45 to +45 degrees), with no central channel or lane dividers. The trough has a procedurally grained oak finish with rounded wooden lips. Each marble has two visible swirling colors and a polished clearcoat finish. Typical races are targeted at roughly 80–100 seconds, depending on collisions and merges.
+The first racer across the finish line wins. The downhill course runs approximately 859 units in plan and drops 117 units. It traces the outer walls of an enclosed wooden race hall, then makes progressively smaller turns toward the center of the room. The hall includes plaster walls, wood paneling, framed windows, ceiling beams, lighting fixtures, a wood floor, and track brackets and posts. The standard track has a 5.8-unit-wide, smoothly curved cross section describing the **bottom quarter of a circle** (90 degrees total, from -45 to +45 degrees), with no permanent center channel. Special fork sections deliberately introduce a short divider. The trough has a procedurally grained oak finish with rounded wooden lips. Each marble has two visible swirling colors and a polished clearcoat finish. Typical races are targeted at roughly 80–100 seconds, depending on collisions and merges.
+
+### Track features
+
+The course is now an obstacle sequence rather than a uniform chute:
+
+- **Inverted-bell bowls** flare the chute into wide, lower catch basins before narrowing back to normal. Their slope contributes to downhill acceleration.
+- **Drop chutes** introduce three localized, steeper descents into the overall 117-unit elevation change.
+- **Rotating wheels** sweep spokes through the marble flow. Contact reduces forward speed and adds a lateral impulse.
+- **Paddle spinners** rotate across the chute and deliver stronger deflections.
+- **Fork guide sections** use a raised central divider with two marked routes. Marbles are guided to one side, and marbles on opposite sides of a divider cannot collide or merge through it.
+
+The race is still constrained to the continuous track's longitudinal path; fork sections divide that path laterally rather than create independent spatial route networks. The obstacle contacts are game-physics approximations, not full rigid-body interactions.
 
 ## Physics model
 
