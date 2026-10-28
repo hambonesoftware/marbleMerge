@@ -39,11 +39,18 @@
       </div>
     </header>
 
-    <aside class="leaderboard panel">
-      <div class="panel-heading"><span class="live-dot"></span><strong>LIVE STANDINGS</strong><small>POSITION</small></div>
-      <div id="leader-list" class="leader-list"></div>
-      <div class="legend"><span class="legend-dot"></span> Tap a racer to follow</div>
-    </aside>
+    <section class="race-progress panel" aria-label="Live race completion positions">
+      <div class="progress-heading">
+        <span class="progress-title"><span class="live-dot"></span> LIVE TRACK POSITIONS</span>
+        <span id="progress-leader" class="progress-leader">LEADER · 0%</span>
+        <span id="progress-current" class="progress-current">FOLLOWING RED · 0%</span>
+      </div>
+      <div id="progress-line" class="progress-line">
+        <div class="progress-track"></div>
+        <div id="progress-marbles" class="progress-marbles"></div>
+      </div>
+      <div class="progress-scale"><span>START · 0%</span><span>25%</span><span>50%</span><span>75%</span><span>FINISH · 100%</span></div>
+    </section>
 
     <section class="race-callout" id="race-callout" aria-live="polite">
       <span class="callout-label">NOW RACING</span>
@@ -72,7 +79,7 @@
         <button id="play-btn" class="play-btn">Ⅱ <span>PAUSE</span></button>
       </div>
     </footer>
-    <div class="bottom-note">PROTOTYPE 01 <span>•</span> AUTOMATIC RACING <span>•</span> DESIGNED FOR 60-SECOND FINISHES</div>
+    <div class="bottom-note">PROTOTYPE 02 <span>•</span> HIGH-SPEED DOWNHILL <span>•</span> LONG-COURSE GRAND PRIX</div>
     <div class="loading" id="loading"><div class="loader-orb"></div><strong>BUILDING THE CIRCUIT</strong><span>Preparing your marbles…</span></div>
   </main>
   <script type="module" src="./src/game.js"></script>

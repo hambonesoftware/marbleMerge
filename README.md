@@ -7,10 +7,10 @@ A bright, glossy 3D marble race for the browser, built using [Three.js](https://
 - **Follow** watches the chosen marble from a smooth chase camera.
 - **Inside Ball** puts a stabilized first-person camera in the transparent marble, while the colored glass lens spins visually.
 - **Aerial** gives a wider TV-style track view.
-- Select a color or a racer in the standings to change the followed marble.
+- Select a color or tap a miniature marble on the horizontal progress tracker to change the followed marble. The tracker shows every surviving marble's actual percentage of the course.
 - Pause/resume, replay, and 2× simulation speed controls are provided.
 
-The first racer across the finish line wins. Tracks are designed for roughly one-minute races, not an exact 60-second stop.
+The first racer across the finish line wins. The expanded downhill course is roughly 875 world units long with more than 90 units of elevation loss. Racing speeds are approximately twice those of the initial prototype, and typical races are targeted at roughly 80–100 seconds rather than exactly 60 seconds.
 
 ## Physics model
 

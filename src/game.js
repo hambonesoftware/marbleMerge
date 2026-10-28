@@ -8,8 +8,8 @@ import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 const FIXED_STEP = 1 / 120;
 const MARBLE_COUNT = 32;
 const TRACK_WIDTH = 6.6;
-const TRACK_SAMPLES = 800;
-const MAX_RACE_SECONDS = 95;
+const TRACK_SAMPLES = 1250;
+const MAX_RACE_SECONDS = 155;
 const TWO_PI = Math.PI * 2;
 const IDENTITIES = [
   { name: 'RED', hex: 0xff6077 },
@@ -28,7 +28,9 @@ const loading = document.querySelector('#loading');
 const timeEl = document.querySelector('#time');
 const aliveEl = document.querySelector('#alive');
 const mergesEl = document.querySelector('#merges');
-const leaderList = document.querySelector('#leader-list');
+const progressMarbles = document.querySelector('#progress-marbles');
+const progressLeader = document.querySelector('#progress-leader');
+const progressCurrent = document.querySelector('#progress-current');
 const colorChoices = document.querySelector('#color-choices');
 const playButton = document.querySelector('#play-btn');
 const resetButton = document.querySelector('#reset-btn');
@@ -41,8 +43,8 @@ const calloutSubtitle = document.querySelector('#callout-subtitle');
 
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x071421);
-scene.fog = new THREE.FogExp2(0x0c2639, 0.0043);
-const camera = new THREE.PerspectiveCamera(57, 1, 0.035, 750);
+scene.fog = new THREE.FogExp2(0x0c2639, 0.0023);
+const camera = new THREE.PerspectiveCamera(57, 1, 0.035, 1700);
 let renderer;
 try {
   renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false, powerPreference: 'high-performance' });
@@ -72,14 +74,19 @@ const rimLight = new THREE.DirectionalLight(0x65baff, 2.1);
 rimLight.position.set(-40, 20, 65);
 scene.add(rimLight);
 
-const curve = new THREE.CatmullRomCurve3([
+const longCoursePoints = [
   [0, 26, 0], [13, 25.3, 0], [28, 24.3, 8], [46, 23, 13],
   [63, 22, 2], [82, 20.5, -14], [102, 19.6, -12],
   [122, 18, 8], [141, 16.8, 16], [160, 15.6, 6],
   [180, 14.2, -14], [199, 12.8, -11], [219, 11.6, 10],
   [239, 10.3, 15], [257, 9.3, -2], [277, 7.9, -13],
   [295, 6.7, -4], [312, 5.2, 0]
-].map(p => new THREE.Vector3(...p)), false, 'catmullrom', 0.24);
+];
+// Extend the original layout horizontally while increasing its vertical drop
+// from about 21 units to 92 units. Average grade is now roughly 11–12%.
+const curve = new THREE.CatmullRomCurve3(longCoursePoints.map(([x, y, z]) =>
+  new THREE.Vector3(x * 2.4, 8 + (y - 5.2) * 4.4, z * 2.3)
+), false, 'catmullrom', 0.24);
 const trackLength = curve.getLength();
 const track = [];
 const UP = new THREE.Vector3(0, 1, 0);
@@ -154,7 +161,7 @@ function pathTube(offset, height, radius, material) {
   }
   points.push(track[TRACK_SAMPLES].point.clone().addScaledVector(track[TRACK_SAMPLES].normal, offset).addScaledVector(UP, height));
   const path = new THREE.CatmullRomCurve3(points);
-  return new THREE.Mesh(new THREE.TubeGeometry(path, Math.ceil(trackLength * 1.4), radius, 5, false), material);
+  return new THREE.Mesh(new THREE.TubeGeometry(path, Math.min(1500, Math.ceil(trackLength * 1.3)), radius, 5, false), material);
 }
 const railMaterial = new THREE.MeshStandardMaterial({ color: 0x50dfff, emissive: 0x1fbaff, emissiveIntensity: 2.2, metalness: 0.3, roughness: 0.2 });
 const railHighlight = new THREE.MeshStandardMaterial({ color: 0xe9faff, emissive: 0x7ad8ff, emissiveIntensity: 0.55, metalness: 0.35, roughness: 0.16 });
@@ -168,8 +175,8 @@ for (const side of [-1, 1]) {
 }
 
 const supportMaterial = new THREE.MeshStandardMaterial({ color: 0x1d5168, metalness: 0.72, roughness: 0.23 });
-const baseY = -19;
-for (let s = 9; s < trackLength; s += 13) {
+const baseY = -23;
+for (let s = 12; s < trackLength; s += 25) {
   const p = worldAt(s, 0);
   const h = p.y - baseY;
   const pillar = new THREE.Mesh(new THREE.CylinderGeometry(0.19, 0.28, h, 7), supportMaterial);
@@ -182,18 +189,18 @@ for (let s = 9; s < trackLength; s += 13) {
   trackGroup.add(cap);
 }
 
-const floorGrid = new THREE.GridHelper(950, 125, 0x2c6981, 0x15374c);
+const floorGrid = new THREE.GridHelper(2400, 160, 0x2c6981, 0x15374c);
 floorGrid.position.y = baseY - 0.4;
 floorGrid.material.transparent = true;
 floorGrid.material.opacity = 0.27;
 scene.add(floorGrid);
-const floor = new THREE.Mesh(new THREE.PlaneGeometry(1050, 1050), new THREE.MeshStandardMaterial({ color: 0x061624, metalness: 0.1, roughness: 0.9 }));
+const floor = new THREE.Mesh(new THREE.PlaneGeometry(2400, 2400), new THREE.MeshStandardMaterial({ color: 0x061624, metalness: 0.1, roughness: 0.9 }));
 floor.rotation.x = -Math.PI / 2;
 floor.position.y = baseY - 0.5;
 scene.add(floor);
 
 const portalMaterial = new THREE.MeshStandardMaterial({ color: 0x4de3f7, emissive: 0x1b90bf, emissiveIntensity: 2.3, metalness: 0.3, roughness: 0.18 });
-for (const s of [30, 93, 161, 229, trackLength - 19]) {
+for (const s of [0.08, 0.29, 0.51, 0.73, 0.94].map(fraction => fraction * trackLength)) {
   const f = frameAt(s);
   const torus = new THREE.Mesh(new THREE.TorusGeometry(4.05, 0.075, 7, 60, Math.PI), portalMaterial);
   torus.rotation.z = Math.PI / 2;
@@ -204,7 +211,7 @@ for (const s of [30, 93, 161, 229, trackLength - 19]) {
 
 const obstacles = [];
 const obstacleMaterial = new THREE.MeshPhysicalMaterial({ color: 0xffb25c, emissive: 0xf06527, emissiveIntensity: 0.85, metalness: 0.72, roughness: 0.17, clearcoat: 1 });
-for (let s = 25, i = 0; s < trackLength - 20; s += 24, i++) {
+for (let s = 38, i = 0; s < trackLength - 30; s += 56, i++) {
   const lane = ([-1.6, 1.7, 0.2, -2.15, 1.1, 0.0][i % 6]);
   const radius = i % 4 === 0 ? 0.63 : 0.42;
   obstacles.push({ s, lane, radius, lastHits: new Map() });
@@ -330,8 +337,8 @@ function createRacers() {
     const racer = {
       id: i, identity, tier, mass: massForTier(tier), radius: radiusForTier(tier),
       s, lane, prevS: s, prevLane: lane,
-      v: 4.5 + rand() * 0.55, vl: 0,
-      drag: 0.040 + rand() * 0.010,
+      v: 7.4 + rand() * 0.9, vl: 0,
+      drag: 0.035 + rand() * 0.009,
       bias: rand() * TWO_PI, roll: rand() * TWO_PI,
       alive: true, finished: false, finishTime: null,
       lastObstacle: -1, lastObstacleTime: -100,
@@ -339,6 +346,27 @@ function createRacers() {
     };
     createMarbleMesh(racer);
     racers.push(racer);
+  }
+  buildProgressMarkers();
+}
+
+function buildProgressMarkers() {
+  progressMarbles.replaceChildren();
+  for (const racer of racers) {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'progress-marble';
+    button.style.setProperty('--row', `${15 + (racer.id % 5) * 17.5}%`);
+    button.style.setProperty('--progress', '0%');
+    button.style.setProperty('--identity-color', `#${racer.identity.hex.toString(16).padStart(6, '0')}`);
+    button.style.setProperty('--ball-color', `#${TIER_COLORS[racer.tier - 1].toString(16).padStart(6, '0')}`);
+    button.textContent = String(2 ** racer.tier);
+    button.title = `${racer.identity.name} #${racer.id + 1}`;
+    button.setAttribute('aria-label', `Follow ${racer.identity.name.toLowerCase()} marble ${racer.id + 1}`);
+    button.addEventListener('click', () => selectMarble(racer.id));
+    racer.progressMarker = button;
+    racer.progressTier = racer.tier;
+    progressMarbles.appendChild(button);
   }
 }
 
@@ -435,9 +463,9 @@ function updateRacer(r, dt) {
   if (!r.alive || r.finished) return;
   const frame = frameAt(r.s);
   const downhill = -frame.tangent.y;
-  const acceleration = 1.28 + 15 * downhill - r.drag * r.v * Math.abs(r.v);
+  const acceleration = 1.9 + 21 * downhill - r.drag * r.v * Math.abs(r.v);
   r.v += acceleration * dt;
-  r.v = THREE.MathUtils.clamp(r.v, 0.9, 8.6);
+  r.v = THREE.MathUtils.clamp(r.v, 1.3, 18.5);
   const weave = Math.sin(r.s * 0.045 + r.bias) * 0.56 + Math.sin(r.s * 0.117 + r.bias * 1.8) * 0.38;
   const targetLane = THREE.MathUtils.clamp(weave, -TRACK_WIDTH * 0.34, TRACK_WIDTH * 0.34);
   // Critically damped steering keeps motion smooth at any render frame rate.
@@ -528,6 +556,26 @@ function updateMarbleMeshes(dt, alpha) {
   }
 }
 
+function updateProgressMarkers(alpha) {
+  const finishDistance = trackLength - 2;
+  for (const racer of racers) {
+    const marker = racer.progressMarker;
+    if (!marker) continue;
+    if (!racer.alive) {
+      marker.classList.add('out');
+      continue;
+    }
+    const interpolatedDistance = THREE.MathUtils.lerp(racer.prevS, racer.s, alpha);
+    const percent = THREE.MathUtils.clamp(interpolatedDistance / finishDistance * 100, 0, 100);
+    marker.style.setProperty('--progress', `${percent.toFixed(3)}%`);
+    if (racer.tier !== racer.progressTier) {
+      racer.progressTier = racer.tier;
+      marker.textContent = String(2 ** racer.tier);
+      marker.style.setProperty('--ball-color', `#${TIER_COLORS[Math.min(TIER_COLORS.length - 1, racer.tier - 1)].toString(16).padStart(6, '0')}`);
+    }
+  }
+}
+
 const desiredCamera = new THREE.Vector3();
 const desiredLook = new THREE.Vector3();
 function updateCamera(dt) {
@@ -571,14 +619,16 @@ function updateHud() {
   mergesEl.textContent = String(totalMerges);
   const leaders = sortedRacers();
   leaderId = leaders[0]?.id ?? -1;
-  leaderList.replaceChildren();
-  for (const [index, racer] of leaders.slice(0, 6).entries()) {
-    const button = document.createElement('button');
-    button.type = 'button';
-    button.className = `racer-row${racer.id === selectedId ? ' selected' : ''}`;
-    button.innerHTML = `<span class="racer-rank">${index + 1}</span><span class="racer-chip" style="--chip-color:#${racer.identity.hex.toString(16).padStart(6, '0')};background:#${racer.identity.hex.toString(16).padStart(6, '0')}"></span><span class="racer-text"><strong>${racer.identity.name} ${racer.id + 1}</strong><span>MERGE ${2 ** racer.tier}</span></span><span class="racer-progress">${Math.min(100, Math.max(0, Math.round(racer.s / (trackLength - 2) * 100)))}%</span>`;
-    button.addEventListener('click', () => selectMarble(racer.id));
-    leaderList.appendChild(button);
+  const leader = leaders[0];
+  const selected = selectedRacer();
+  const completion = racer => Math.round(THREE.MathUtils.clamp(racer.s / (trackLength - 2) * 100, 0, 100));
+  progressLeader.textContent = leader ? `LEADER ${leader.identity.name} · ${completion(leader)}%` : 'NO MARBLES';
+  progressCurrent.textContent = selected ? `FOLLOWING ${selected.identity.name} · ${completion(selected)}%` : '';
+  for (const racer of racers) {
+    if (!racer.progressMarker) continue;
+    racer.progressMarker.classList.toggle('selected', racer.alive && racer.id === selected?.id);
+    racer.progressMarker.classList.toggle('leader', racer.alive && racer.id === leaderId);
+    racer.progressMarker.title = `${racer.identity.name} #${racer.id + 1} · ${completion(racer)}% · ${2 ** racer.tier}`;
   }
 }
 
@@ -676,6 +726,7 @@ function animate(now) {
     if (substeps >= 14) accumulator = 0;
   }
   updateMarbleMeshes(elapsed, Math.min(1, accumulator / FIXED_STEP));
+  updateProgressMarkers(Math.min(1, accumulator / FIXED_STEP));
   updateParticles(elapsed);
   updateCamera(elapsed);
   if (now - lastHudTime > 150) { updateHud(); lastHudTime = now; }
