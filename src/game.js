@@ -7,10 +7,13 @@ import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 
 const FIXED_STEP = 1 / 120;
 const MARBLE_COUNT = 32;
-const TRACK_WIDTH = 6.6;
+const TRACK_WIDTH = 5.8;
 const TRACK_SAMPLES = 1250;
 const MAX_RACE_SECONDS = 155;
 const TWO_PI = Math.PI * 2;
+const TROUGH_HALF_ANGLE = Math.PI / 4;
+const TROUGH_RADIUS = TRACK_WIDTH / (2 * Math.sin(TROUGH_HALF_ANGLE));
+const TROUGH_SEGMENTS = 18;
 const IDENTITIES = [
   { name: 'RED', hex: 0xff6077 },
   { name: 'ORANGE', hex: 0xffad4e },
@@ -22,6 +25,7 @@ const IDENTITIES = [
   { name: 'PINK', hex: 0xff79dc }
 ];
 const TIER_COLORS = [0x65d9ff, 0xffc353, 0xff6385, 0x8cf19c, 0x8c8eff, 0xed85ff, 0xf3dd68, 0xffffff, 0x65e9e6, 0xffa6a1];
+const SWIRL_COLORS = [0xffde8b, 0x47d8e8, 0xfd6f8b, 0x175f63, 0x244cc7, 0xffca79, 0xf9d46b, 0x82fbd7];
 
 const viewport = document.querySelector('#viewport');
 const loading = document.querySelector('#loading');
@@ -42,8 +46,8 @@ const calloutTitle = document.querySelector('#callout-title');
 const calloutSubtitle = document.querySelector('#callout-subtitle');
 
 const scene = new THREE.Scene();
-scene.background = new THREE.Color(0x071421);
-scene.fog = new THREE.FogExp2(0x0c2639, 0.0023);
+scene.background = new THREE.Color(0x1d2530);
+scene.fog = new THREE.FogExp2(0x27313a, 0.0018);
 const camera = new THREE.PerspectiveCamera(57, 1, 0.035, 1700);
 let renderer;
 try {
@@ -66,11 +70,11 @@ const environment = pmrem.fromScene(new RoomEnvironment(), 0.04);
 scene.environment = environment.texture;
 pmrem.dispose();
 
-scene.add(new THREE.HemisphereLight(0xa8e7ff, 0x173047, 2.8));
-const keyLight = new THREE.DirectionalLight(0xffe8d5, 3.2);
+scene.add(new THREE.HemisphereLight(0xfff0d5, 0x283347, 2.6));
+const keyLight = new THREE.DirectionalLight(0xffe9c9, 3.3);
 keyLight.position.set(25, 60, -40);
 scene.add(keyLight);
-const rimLight = new THREE.DirectionalLight(0x65baff, 2.1);
+const rimLight = new THREE.DirectionalLight(0xa7cfff, 1.9);
 rimLight.position.set(-40, 20, 65);
 scene.add(rimLight);
 
@@ -82,10 +86,10 @@ const longCoursePoints = [
   [239, 10.3, 15], [257, 9.3, -2], [277, 7.9, -13],
   [295, 6.7, -4], [312, 5.2, 0]
 ];
-// Extend the original layout horizontally while increasing its vertical drop
-// from about 21 units to 92 units. Average grade is now roughly 11–12%.
+// The course remains long, while the vertical profile is steeper still.
+// A 5.6× height scale produces about 116.5 units of descent.
 const curve = new THREE.CatmullRomCurve3(longCoursePoints.map(([x, y, z]) =>
-  new THREE.Vector3(x * 2.4, 8 + (y - 5.2) * 4.4, z * 2.3)
+  new THREE.Vector3(x * 2.4, 8 + (y - 5.2) * 5.6, z * 2.3)
 ), false, 'catmullrom', 0.24);
 const trackLength = curve.getLength();
 const track = [];
@@ -114,42 +118,118 @@ function frameAt(s) {
   };
 }
 
+function troughHeight(lane) {
+  const x = THREE.MathUtils.clamp(lane, -TRACK_WIDTH / 2, TRACK_WIDTH / 2);
+  return TROUGH_RADIUS - Math.sqrt(Math.max(0, TROUGH_RADIUS * TROUGH_RADIUS - x * x));
+}
+
 function worldAt(s, lane, height = 0) {
   const frame = frameAt(s);
-  return frame.point.addScaledVector(frame.normal, lane).addScaledVector(UP, height);
+  return frame.point.addScaledVector(frame.normal, lane).addScaledVector(UP, troughHeight(lane) + height);
+}
+
+function marbleCenterAt(s, lane, radius) {
+  // A sphere resting against the inner wall of a circular channel is offset
+  // along the wall normal; its center follows a concentric arc of radius R-r.
+  const centerRadius = Math.max(0.75, TROUGH_RADIUS - radius);
+  const x = THREE.MathUtils.clamp(lane, -centerRadius * Math.sin(TROUGH_HALF_ANGLE), centerRadius * Math.sin(TROUGH_HALF_ANGLE));
+  const height = TROUGH_RADIUS - Math.sqrt(Math.max(0, centerRadius * centerRadius - x * x));
+  const frame = frameAt(s);
+  return frame.point.addScaledVector(frame.normal, x).addScaledVector(UP, height - 0.07);
 }
 
 const trackGroup = new THREE.Group();
 scene.add(trackGroup);
+
+// Paint continuous oak grain in the longitudinal direction. The broad and
+// fine grain, changing pore density and knots are deterministic so the
+// surface can be regenerated offline without downloading image assets.
+function makeWoodTexture() {
+  const width = 512;
+  const height = 1024;
+  const canvas = document.createElement('canvas');
+  canvas.width = width;
+  canvas.height = height;
+  const context = canvas.getContext('2d');
+  const image = context.createImageData(width, height);
+  const data = image.data;
+  const knots = [{ x: 133, y: 230, width: 38, length: 119 }, { x: 397, y: 777, width: 31, length: 105 }];
+  const hash = (x, y) => {
+    const value = Math.sin(x * 127.1 + y * 311.7) * 43758.5453123;
+    return value - Math.floor(value);
+  };
+  for (let y = 0; y < height; y++) {
+    const lengthDrift = 12 * Math.sin(y * 0.007) + 4 * Math.sin(y * 0.022);
+    for (let x = 0; x < width; x++) {
+      let warpedX = x + lengthDrift + 7 * Math.sin(y * 0.018 + x * 0.011);
+      let knotDarkness = 0;
+      for (const knot of knots) {
+        const dx = (x - knot.x) / knot.width;
+        const dy = (y - knot.y) / knot.length;
+        const falloff = Math.exp(-1.7 * (dx * dx + dy * dy));
+        warpedX += 25 * falloff * Math.sin(3.5 * dy);
+        const ellipse = Math.sqrt(dx * dx + dy * dy);
+        knotDarkness += 0.45 * Math.exp(-Math.pow((ellipse - 0.43) * 4.2, 2)) * falloff;
+      }
+      const grain = 0.53 * Math.sin(warpedX * 0.075 + Math.sin(y * 0.005) * 0.8)
+        + 0.27 * Math.sin(warpedX * 0.19 + y * 0.003)
+        + 0.13 * Math.sin(warpedX * 0.53 + 0.3 * Math.sin(y * 0.016));
+      const pore = hash(Math.floor(x * 0.75), Math.floor(y * 0.43)) - 0.5;
+      const shade = grain * 16 + pore * 9 - knotDarkness * 62 + Math.sin(x * 0.018) * 4;
+      const offset = (y * width + x) * 4;
+      data[offset] = THREE.MathUtils.clamp(175 + shade, 0, 255);
+      data[offset + 1] = THREE.MathUtils.clamp(110 + shade * 0.78, 0, 255);
+      data[offset + 2] = THREE.MathUtils.clamp(56 + shade * 0.55, 0, 255);
+      data[offset + 3] = 255;
+    }
+  }
+  context.putImageData(image, 0, 0);
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.colorSpace = THREE.SRGBColorSpace;
+  texture.wrapS = THREE.RepeatWrapping;
+  texture.wrapT = THREE.RepeatWrapping;
+  texture.anisotropy = Math.min(8, renderer.capabilities.getMaxAnisotropy());
+  return texture;
+}
+const oakGrain = makeWoodTexture();
 const bottomPositions = [];
 const topPositions = [];
 const indices = [];
+const surfaceUvs = [];
+const rowSize = TROUGH_SEGMENTS + 1;
 for (let i = 0; i <= TRACK_SAMPLES; i++) {
   const f = track[i];
-  for (const sign of [-1, 1]) {
-    const edge = f.point.clone().addScaledVector(f.normal, sign * TRACK_WIDTH / 2);
-    topPositions.push(edge.x, edge.y - 0.1, edge.z);
-    bottomPositions.push(edge.x, edge.y - 0.35, edge.z);
+  for (let j = 0; j <= TROUGH_SEGMENTS; j++) {
+    const angle = -TROUGH_HALF_ANGLE + j / TROUGH_SEGMENTS * (2 * TROUGH_HALF_ANGLE);
+    const lateral = TROUGH_RADIUS * Math.sin(angle);
+    const rise = TROUGH_RADIUS * (1 - Math.cos(angle));
+    const point = f.point.clone().addScaledVector(f.normal, lateral);
+    topPositions.push(point.x, point.y + rise - 0.1, point.z);
+    bottomPositions.push(point.x, point.y + rise - 0.38, point.z);
+    surfaceUvs.push(j / TROUGH_SEGMENTS, i / TRACK_SAMPLES * trackLength / 24);
   }
   if (i < TRACK_SAMPLES) {
-    const k = i * 2;
-    indices.push(k, k + 2, k + 1, k + 1, k + 2, k + 3);
+    for (let j = 0; j < TROUGH_SEGMENTS; j++) {
+      const k = i * rowSize + j;
+      indices.push(k, k + rowSize, k + 1, k + 1, k + rowSize, k + rowSize + 1);
+    }
   }
 }
 function stripGeometry(positions) {
   const geometry = new THREE.BufferGeometry();
   geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+  geometry.setAttribute('uv', new THREE.Float32BufferAttribute(surfaceUvs, 2));
   geometry.setIndex(indices);
   geometry.computeVertexNormals();
   return geometry;
 }
 const underTrack = new THREE.Mesh(stripGeometry(bottomPositions), new THREE.MeshStandardMaterial({
-  color: 0x0a273c, metalness: 0.68, roughness: 0.24, side: THREE.DoubleSide
+  map: oakGrain, color: 0x796657, metalness: 0, roughness: 0.58, side: THREE.DoubleSide
 }));
 trackGroup.add(underTrack);
 const surface = new THREE.Mesh(stripGeometry(topPositions), new THREE.MeshPhysicalMaterial({
-  color: 0x40738a, metalness: 0.35, roughness: 0.13, transparent: true,
-  opacity: 0.79, clearcoat: 1, clearcoatRoughness: 0.08, side: THREE.DoubleSide
+  map: oakGrain, color: 0xffefcf, metalness: 0, roughness: 0.31,
+  clearcoat: 0.82, clearcoatRoughness: 0.22, side: THREE.DoubleSide
 }));
 trackGroup.add(surface);
 
@@ -157,24 +237,22 @@ function pathTube(offset, height, radius, material) {
   const points = [];
   for (let i = 0; i <= TRACK_SAMPLES; i += 3) {
     const f = track[i];
-    points.push(f.point.clone().addScaledVector(f.normal, offset).addScaledVector(UP, height));
+    points.push(f.point.clone().addScaledVector(f.normal, offset).addScaledVector(UP, troughHeight(offset) + height));
   }
-  points.push(track[TRACK_SAMPLES].point.clone().addScaledVector(track[TRACK_SAMPLES].normal, offset).addScaledVector(UP, height));
+  points.push(worldAt(trackLength, offset, height));
   const path = new THREE.CatmullRomCurve3(points);
   return new THREE.Mesh(new THREE.TubeGeometry(path, Math.min(1500, Math.ceil(trackLength * 1.3)), radius, 5, false), material);
 }
-const railMaterial = new THREE.MeshStandardMaterial({ color: 0x50dfff, emissive: 0x1fbaff, emissiveIntensity: 2.2, metalness: 0.3, roughness: 0.2 });
-const railHighlight = new THREE.MeshStandardMaterial({ color: 0xe9faff, emissive: 0x7ad8ff, emissiveIntensity: 0.55, metalness: 0.35, roughness: 0.16 });
+const railMaterial = new THREE.MeshPhysicalMaterial({ color: 0x6c3820, metalness: 0, roughness: 0.3, clearcoat: 0.75 });
+const railHighlight = new THREE.MeshStandardMaterial({ color: 0xdca76a, metalness: 0.15, roughness: 0.32 });
 for (const side of [-1, 1]) {
-  trackGroup.add(pathTube(side * (TRACK_WIDTH / 2 + 0.1), 0.26, 0.085, railMaterial));
-  trackGroup.add(pathTube(side * (TRACK_WIDTH / 2 + 0.1), 0.95, 0.046, railHighlight));
-}
-for (const side of [-1, 1]) {
-  trackGroup.add(pathTube(side * (TRACK_WIDTH / 6), -0.03, 0.014,
-    new THREE.MeshBasicMaterial({ color: 0x9ac4e0, transparent: true, opacity: 0.28 })));
+  trackGroup.add(pathTube(side * (TRACK_WIDTH / 2 + 0.04), 0.08, 0.12, railMaterial));
+  trackGroup.add(pathTube(side * (TRACK_WIDTH / 2 + 0.04), 0.15, 0.036, railHighlight));
 }
 
-const supportMaterial = new THREE.MeshStandardMaterial({ color: 0x1d5168, metalness: 0.72, roughness: 0.23 });
+// No center groove or parallel dividing strips: this is one uninterrupted
+// quarter-circle wooden chute, not multiple marble lanes.
+const supportMaterial = new THREE.MeshStandardMaterial({ color: 0x41362e, metalness: 0.12, roughness: 0.58 });
 const baseY = -23;
 for (let s = 12; s < trackLength; s += 25) {
   const p = worldAt(s, 0);
@@ -189,28 +267,13 @@ for (let s = 12; s < trackLength; s += 25) {
   trackGroup.add(cap);
 }
 
-const floorGrid = new THREE.GridHelper(2400, 160, 0x2c6981, 0x15374c);
-floorGrid.position.y = baseY - 0.4;
-floorGrid.material.transparent = true;
-floorGrid.material.opacity = 0.27;
-scene.add(floorGrid);
-const floor = new THREE.Mesh(new THREE.PlaneGeometry(2400, 2400), new THREE.MeshStandardMaterial({ color: 0x061624, metalness: 0.1, roughness: 0.9 }));
+const floor = new THREE.Mesh(new THREE.PlaneGeometry(2400, 2400), new THREE.MeshStandardMaterial({ color: 0x1b2026, metalness: 0.07, roughness: 0.88 }));
 floor.rotation.x = -Math.PI / 2;
 floor.position.y = baseY - 0.5;
 scene.add(floor);
 
-const portalMaterial = new THREE.MeshStandardMaterial({ color: 0x4de3f7, emissive: 0x1b90bf, emissiveIntensity: 2.3, metalness: 0.3, roughness: 0.18 });
-for (const s of [0.08, 0.29, 0.51, 0.73, 0.94].map(fraction => fraction * trackLength)) {
-  const f = frameAt(s);
-  const torus = new THREE.Mesh(new THREE.TorusGeometry(4.05, 0.075, 7, 60, Math.PI), portalMaterial);
-  torus.rotation.z = Math.PI / 2;
-  torus.quaternion.premultiply(new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 0, 1), f.tangent));
-  torus.position.copy(f.point).addScaledVector(UP, 0.35);
-  trackGroup.add(torus);
-}
-
 const obstacles = [];
-const obstacleMaterial = new THREE.MeshPhysicalMaterial({ color: 0xffb25c, emissive: 0xf06527, emissiveIntensity: 0.85, metalness: 0.72, roughness: 0.17, clearcoat: 1 });
+const obstacleMaterial = new THREE.MeshPhysicalMaterial({ color: 0x844b2e, metalness: 0.03, roughness: 0.34, clearcoat: 0.65 });
 for (let s = 38, i = 0; s < trackLength - 30; s += 56, i++) {
   const lane = ([-1.6, 1.7, 0.2, -2.15, 1.1, 0.0][i % 6]);
   const radius = i % 4 === 0 ? 0.63 : 0.42;
@@ -224,16 +287,67 @@ for (let s = 38, i = 0; s < trackLength - 30; s += 56, i++) {
   trackGroup.add(top);
 }
 
-const finishFrame = frameAt(trackLength - 2);
-const finishBar = new THREE.Mesh(new THREE.BoxGeometry(TRACK_WIDTH + 0.25, 0.05, 0.68), new THREE.MeshStandardMaterial({ color: 0xf7e6a5, emissive: 0x94761f, emissiveIntensity: 1.5 }));
-finishBar.position.copy(finishFrame.point).addScaledVector(UP, 0.03);
-finishBar.rotation.y = Math.atan2(finishFrame.tangent.z, finishFrame.tangent.x);
+const finishCrossSection = [];
+for (let j = 0; j <= TROUGH_SEGMENTS; j++) {
+  finishCrossSection.push(worldAt(trackLength - 2, -TRACK_WIDTH / 2 + j * TRACK_WIDTH / TROUGH_SEGMENTS, 0.07));
+}
+const finishBar = new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(finishCrossSection), 64, 0.13, 8, false), new THREE.MeshStandardMaterial({ color: 0xe5c885, metalness: 0.72, roughness: 0.22 }));
 trackGroup.add(finishBar);
 
-const marbleGeometry = new THREE.SphereGeometry(1, 32, 24);
-const coreGeometry = new THREE.SphereGeometry(0.76, 20, 14);
-const glintGeometry = new THREE.SphereGeometry(0.14, 10, 8);
+const marbleGeometry = new THREE.SphereGeometry(1, 40, 30);
+const coreGeometry = new THREE.SphereGeometry(0.69, 20, 14);
 const labelTextureCache = new Map();
+const swirlTextureCache = new Map();
+
+function makeSwirlTexture(identity) {
+  if (swirlTextureCache.has(identity.name)) return swirlTextureCache.get(identity.name);
+  const index = IDENTITIES.indexOf(identity);
+  const primary = identity.hex;
+  const secondary = SWIRL_COLORS[index];
+  const channel = (hex, shift) => (hex >> shift) & 255;
+  const width = 384;
+  const height = 192;
+  const canvas = document.createElement('canvas');
+  canvas.width = width;
+  canvas.height = height;
+  const context = canvas.getContext('2d');
+  const image = context.createImageData(width, height);
+  const pixels = image.data;
+  const phaseOffset = index * 0.49;
+  const smoothstep = value => {
+    const n = THREE.MathUtils.clamp(value, 0, 1);
+    return n * n * (3 - 2 * n);
+  };
+  for (let y = 0; y < height; y++) {
+    const v = y / (height - 1);
+    for (let x = 0; x < width; x++) {
+      const u = x / (width - 1);
+      // Latitude-dependent phase bends the second color into broad, flowing
+      // helices rather than straight stripes. All u-dependent terms loop at
+      // the sphere's seam, so the swirl stays continuous as it spins.
+      const phase = TWO_PI * (u * 3 - v * 1.55)
+        + 1.32 * Math.sin(TWO_PI * v * 1.8 + phaseOffset)
+        + 0.27 * Math.sin(TWO_PI * (u * 5 + v * 2) + phaseOffset);
+      const wave = Math.sin(phase) + 0.20 * Math.sin(2 * phase + 0.75);
+      const accent = smoothstep((wave + 0.18) / 0.45);
+      const paleVein = smoothstep((Math.sin(phase * 2 + 0.5) - 0.87) * 5.0) * 0.1;
+      const shade = 0.94 + 0.08 * Math.sin(TWO_PI * (v * 1.3 + u * 4) + phaseOffset);
+      const k = (y * width + x) * 4;
+      for (const [offset, shift] of [[0, 16], [1, 8], [2, 0]]) {
+        const main = channel(primary, shift);
+        const highlight = channel(secondary, shift);
+        pixels[k + offset] = THREE.MathUtils.clamp((main * (1 - accent) + highlight * accent) * shade + paleVein * 24, 0, 255);
+      }
+      pixels[k + 3] = 255;
+    }
+  }
+  context.putImageData(image, 0, 0);
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.colorSpace = THREE.SRGBColorSpace;
+  texture.anisotropy = Math.min(8, renderer.capabilities.getMaxAnisotropy());
+  swirlTextureCache.set(identity.name, texture);
+  return texture;
+}
 
 function labelTexture(tier) {
   if (labelTextureCache.has(tier)) return labelTextureCache.get(tier);
@@ -262,27 +376,19 @@ function createMarbleMesh(racer) {
   const spin = new THREE.Group();
   group.add(spin);
   const material = new THREE.MeshPhysicalMaterial({
-    color: TIER_COLORS[racer.tier - 1] || TIER_COLORS.at(-1), metalness: 0.13,
-    roughness: 0.065, transmission: 0.14, thickness: 1.25,
-    clearcoat: 1, clearcoatRoughness: 0.025, ior: 1.48,
-    envMapIntensity: 2.1
+    map: makeSwirlTexture(racer.identity), color: 0xffffff, metalness: 0.03,
+    roughness: 0.08, transmission: 0.045, thickness: 0.8,
+    clearcoat: 1, clearcoatRoughness: 0.025, ior: 1.47,
+    envMapIntensity: 1.8
   });
   const shell = new THREE.Mesh(marbleGeometry, material);
   spin.add(shell);
   const coreMaterial = new THREE.MeshStandardMaterial({
-    color: racer.identity.hex, metalness: 0.36, roughness: 0.22,
-    emissive: racer.identity.hex, emissiveIntensity: 0.12,
-    transparent: true, opacity: 0.75
+    color: racer.identity.hex, metalness: 0.05, roughness: 0.25,
+    transparent: true, opacity: 0.28, depthWrite: false
   });
   const core = new THREE.Mesh(coreGeometry, coreMaterial);
   spin.add(core);
-  const glint = new THREE.Mesh(glintGeometry, new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.62 }));
-  glint.position.set(-0.42, 0.57, 0.48);
-  spin.add(glint);
-  const ring = new THREE.Mesh(new THREE.TorusGeometry(0.8, 0.046, 7, 48),
-    new THREE.MeshStandardMaterial({ color: racer.identity.hex, emissive: racer.identity.hex, emissiveIntensity: 0.34, metalness: 0.45, roughness: 0.19 }));
-  ring.rotation.set(0.46, 0.12, 0.5);
-  spin.add(ring);
   const number = new THREE.Sprite(new THREE.SpriteMaterial({ map: labelTexture(racer.tier), transparent: true, depthTest: true, depthWrite: false }));
   number.scale.set(1.18, 1.18, 1);
   number.position.set(0, 0.07, 0);
@@ -324,6 +430,10 @@ function createRacers() {
     if (racer.group) {
       scene.remove(racer.group);
       racer.shell.material.dispose();
+      racer.group.traverse(object => {
+        if (object.isMesh && object !== racer.shell) object.material.dispose();
+        if (object.isSprite) object.material.dispose();
+      });
     }
   }
   racers = [];
@@ -332,7 +442,7 @@ function createRacers() {
     const identity = IDENTITIES[i % IDENTITIES.length];
     const tier = i % 5 === 0 ? 2 : 1;
     const row = Math.floor(i / 8);
-    const lane = -2.8 + (i % 8) * 0.8;
+    const lane = -2.38 + (i % 8) * 0.68;
     const s = -row * 1.28 - rand() * 0.12;
     const racer = {
       id: i, identity, tier, mass: massForTier(tier), radius: radiusForTier(tier),
@@ -359,7 +469,8 @@ function buildProgressMarkers() {
     button.style.setProperty('--row', `${15 + (racer.id % 5) * 17.5}%`);
     button.style.setProperty('--progress', '0%');
     button.style.setProperty('--identity-color', `#${racer.identity.hex.toString(16).padStart(6, '0')}`);
-    button.style.setProperty('--ball-color', `#${TIER_COLORS[racer.tier - 1].toString(16).padStart(6, '0')}`);
+    button.style.setProperty('--ball-color', `#${racer.identity.hex.toString(16).padStart(6, '0')}`);
+    button.style.setProperty('--swirl-color', `#${SWIRL_COLORS[IDENTITIES.indexOf(racer.identity)].toString(16).padStart(6, '0')}`);
     button.textContent = String(2 ** racer.tier);
     button.title = `${racer.identity.name} #${racer.id + 1}`;
     button.setAttribute('aria-label', `Follow ${racer.identity.name.toLowerCase()} marble ${racer.id + 1}`);
@@ -408,7 +519,7 @@ function combine(a, b) {
   survivor.radius = radiusForTier(survivor.tier);
   survivor.prevS = p;
   survivor.prevLane = lateral;
-  survivor.shell.material.color.setHex(TIER_COLORS[Math.min(TIER_COLORS.length - 1, survivor.tier - 1)]);
+  // Preserve the chosen marble's two-color glass after it levels up.
   survivor.number.material.map = labelTexture(survivor.tier);
   survivor.number.material.needsUpdate = true;
   absorbed.alive = false;
@@ -466,13 +577,20 @@ function updateRacer(r, dt) {
   const acceleration = 1.9 + 21 * downhill - r.drag * r.v * Math.abs(r.v);
   r.v += acceleration * dt;
   r.v = THREE.MathUtils.clamp(r.v, 1.3, 18.5);
-  const weave = Math.sin(r.s * 0.045 + r.bias) * 0.56 + Math.sin(r.s * 0.117 + r.bias * 1.8) * 0.38;
-  const targetLane = THREE.MathUtils.clamp(weave, -TRACK_WIDTH * 0.34, TRACK_WIDTH * 0.34);
-  // Critically damped steering keeps motion smooth at any render frame rate.
-  r.vl += ((targetLane - r.lane) * 3.0 - r.vl * 3.45) * dt;
+  // Gravity restores marbles toward the bottom of the 90-degree circular
+  // trough. Curvature and small individual variations keep the pack dynamic.
+  const centerRadius = Math.max(0.75, TROUGH_RADIUS - r.radius);
+  const centeredLane = THREE.MathUtils.clamp(r.lane, -centerRadius * 0.707, centerRadius * 0.707);
+  const lateralGravity = -(5 / 7) * 12.5 * centeredLane * Math.sqrt(Math.max(0, centerRadius * centerRadius - centeredLane * centeredLane)) / (centerRadius * centerRadius);
+  const forwardTangent = frameAt(r.s + 1.5).tangent;
+  const rearTangent = frameAt(r.s - 1.5).tangent;
+  const signedCurvature = (rearTangent.x * forwardTangent.z - rearTangent.z * forwardTangent.x) / 3;
+  const curvePush = -THREE.MathUtils.clamp(r.v * r.v * signedCurvature, -5, 5);
+  const mildVariation = Math.sin(r.s * 0.055 + r.bias) * 0.28;
+  r.vl += (lateralGravity + curvePush * 0.55 + mildVariation - r.vl * 1.45) * dt;
   r.s += r.v * dt;
   r.lane += r.vl * dt;
-  const limit = TRACK_WIDTH / 2 - r.radius - 0.09;
+  const limit = Math.max(0.15, (TROUGH_RADIUS - r.radius) * Math.sin(TROUGH_HALF_ANGLE) - 0.06);
   if (r.lane > limit) { r.lane = limit; r.vl = -Math.abs(r.vl) * 0.48; r.v *= 0.993; }
   if (r.lane < -limit) { r.lane = -limit; r.vl = Math.abs(r.vl) * 0.48; r.v *= 0.993; }
   for (let k = 0; k < obstacles.length; k++) {
@@ -547,7 +665,7 @@ function updateMarbleMeshes(dt, alpha) {
     const s = THREE.MathUtils.lerp(racer.prevS, racer.s, alpha);
     const lane = THREE.MathUtils.lerp(racer.prevLane, racer.lane, alpha);
     racer.visibleRadius += (racer.radius - racer.visibleRadius) * (1 - Math.exp(-dt * 13));
-    racer.group.position.copy(worldAt(s, lane, racer.visibleRadius - 0.07));
+    racer.group.position.copy(marbleCenterAt(s, lane, racer.visibleRadius));
     racer.spin.scale.setScalar(racer.visibleRadius);
     racer.number.scale.setScalar(racer.visibleRadius * 2.4);
     racer.roll += Math.max(0, racer.v * dt) / Math.max(0.1, racer.visibleRadius);
@@ -571,7 +689,6 @@ function updateProgressMarkers(alpha) {
     if (racer.tier !== racer.progressTier) {
       racer.progressTier = racer.tier;
       marker.textContent = String(2 ** racer.tier);
-      marker.style.setProperty('--ball-color', `#${TIER_COLORS[Math.min(TIER_COLORS.length - 1, racer.tier - 1)].toString(16).padStart(6, '0')}`);
     }
   }
 }
@@ -582,7 +699,7 @@ function updateCamera(dt) {
   const racer = selectedRacer();
   if (!racer) return;
   const f = frameAt(racer.s);
-  const ballPos = worldAt(racer.s, racer.lane, racer.visibleRadius + 0.03);
+  const ballPos = marbleCenterAt(racer.s, racer.lane, racer.visibleRadius + 0.03);
   const tangent = f.tangent;
   if (cameraMode === 'onboard') {
     desiredCamera.copy(ballPos).addScaledVector(UP, 0.08);
@@ -682,7 +799,7 @@ function restart() {
   raceTime = 0;
   totalMerges = 0;
   accumulator = 0;
-  calloutTitle.textContent = 'THE GLASS CIRCUIT';
+  calloutTitle.textContent = 'THE OAK DOWNHILL';
   calloutSubtitle.textContent = 'Matching numbers combine. First across wins.';
   playButton.innerHTML = 'Ⅱ <span>PAUSE</span>';
   updateColors();

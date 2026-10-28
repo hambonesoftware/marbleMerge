@@ -1,6 +1,6 @@
 # Marble Merge Grand Prix
 
-A bright, glossy 3D marble race for the browser, built using [Three.js](https://threejs.org/). Host it directly on GitHub Pages; no build step, accounts, or server are required.
+A glossy 3D marble race down a long polished wooden trough, built using [Three.js](https://threejs.org/). Host it directly on GitHub Pages; no build step, accounts, or server are required.
 
 ## Play
 
@@ -10,11 +10,11 @@ A bright, glossy 3D marble race for the browser, built using [Three.js](https://
 - Select a color or tap a miniature marble on the horizontal progress tracker to change the followed marble. The tracker shows every surviving marble's actual percentage of the course.
 - Pause/resume, replay, and 2× simulation speed controls are provided.
 
-The first racer across the finish line wins. The expanded downhill course is roughly 875 world units long with more than 90 units of elevation loss. Racing speeds are approximately twice those of the initial prototype, and typical races are targeted at roughly 80–100 seconds rather than exactly 60 seconds.
+The first racer across the finish line wins. The downhill course is roughly 875 world units long with approximately 116.5 units of elevation loss. It has a 5.8-unit-wide, smoothly curved cross section describing the **bottom quarter of a circle** (90 degrees total, from -45 to +45 degrees), with no central channel or lane dividers. The entire trough has a procedurally grained oak finish with rounded wooden lips. Each marble has two visible, swirling colors and a polished clearcoat finish. Typical races are targeted at roughly 80–100 seconds, depending on collisions and merges.
 
 ## Physics model
 
-This initial release uses a **fixed 120 Hz track-constrained simulation**. Along-track and lateral velocities, collision impulses, rolling drag, gradual steering, and momentum-conserving same-tier merges drive the race. Marble mass doubles and radius scales by the cube root of mass when equal numbered marbles merge. Rendering interpolates between simulation steps, and the camera uses exponential damping to prevent jerkiness.
+This initial release uses a **fixed 120 Hz track-constrained simulation**. Along-track and lateral velocities, collision impulses, rolling drag, circular-trough gravity and turn forces, and momentum-conserving same-tier merges drive the race. Marble mass doubles and radius scales by the cube root of mass when equal numbered marbles merge. Rendering interpolates between simulation steps, and the camera uses exponential damping to prevent jerkiness.
 
 The physics are a game-oriented approximation, **not a general-purpose 3D rigid-body solver**. This approach makes the first race highly stable on phones; a later version can replace the track-constrained engine with Rapier for true free-body tumbling and track contact.
 
