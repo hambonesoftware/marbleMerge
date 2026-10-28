@@ -78,19 +78,29 @@ const rimLight = new THREE.DirectionalLight(0xa7cfff, 1.9);
 rimLight.position.set(-40, 20, 65);
 scene.add(rimLight);
 
-const longCoursePoints = [
-  [0, 26, 0], [13, 25.3, 0], [28, 24.3, 8], [46, 23, 13],
-  [63, 22, 2], [82, 20.5, -14], [102, 19.6, -12],
-  [122, 18, 8], [141, 16.8, 16], [160, 15.6, 6],
-  [180, 14.2, -14], [199, 12.8, -11], [219, 11.6, 10],
-  [239, 10.3, 15], [257, 9.3, -2], [277, 7.9, -13],
-  [295, 6.7, -4], [312, 5.2, 0]
+// The first circuit traces the room's four walls. Its descending return
+// leg steps inward, then makes another lap before spiraling into the middle.
+// Generous radial gaps let the chute pass its own earlier segments safely.
+const roomCourseXZ = [
+  [-67, -51], [-29, -51], [27, -51], [59, -51], [68, -44],
+  [68, -15], [68, 21], [68, 43], [59, 51], [19, 51],
+  [-26, 51], [-59, 51], [-67, 43], [-67, 10], [-67, -24],
+  [-63, -39], [-43, -41], [-6, -41], [32, -41], [46, -35],
+  [49, -13], [49, 18], [43, 29], [13, 30], [-19, 30],
+  [-38, 26], [-43, 8], [-43, -11], [-33, -18], [-5, -19],
+  [18, -19], [24, -11], [24, 1], [17, 8], [8, 8], [0, 0]
 ];
-// The course remains long, while the vertical profile is steeper still.
-// A 5.6× height scale produces about 116.5 units of descent.
-const curve = new THREE.CatmullRomCurve3(longCoursePoints.map(([x, y, z]) =>
-  new THREE.Vector3(x * 2.4, 8 + (y - 5.2) * 5.6, z * 2.3)
-), false, 'catmullrom', 0.24);
+const courseDistances = [0];
+for (let i = 1; i < roomCourseXZ.length; i++) {
+  const [ax, az] = roomCourseXZ[i - 1];
+  const [bx, bz] = roomCourseXZ[i];
+  courseDistances.push(courseDistances[i - 1] + Math.hypot(bx - ax, bz - az));
+}
+const totalPlanDistance = courseDistances.at(-1);
+const curve = new THREE.CatmullRomCurve3(roomCourseXZ.map(([x, z], i) => {
+  const percent = courseDistances[i] / totalPlanDistance;
+  return new THREE.Vector3(x, 125 - percent * 117, z);
+}), false, 'centripetal');
 const trackLength = curve.getLength();
 const track = [];
 const UP = new THREE.Vector3(0, 1, 0);
@@ -253,24 +263,127 @@ for (const side of [-1, 1]) {
 // No center groove or parallel dividing strips: this is one uninterrupted
 // quarter-circle wooden chute, not multiple marble lanes.
 const supportMaterial = new THREE.MeshStandardMaterial({ color: 0x41362e, metalness: 0.12, roughness: 0.58 });
-const baseY = -23;
-for (let s = 12; s < trackLength; s += 25) {
-  const p = worldAt(s, 0);
-  const h = p.y - baseY;
-  const pillar = new THREE.Mesh(new THREE.CylinderGeometry(0.19, 0.28, h, 7), supportMaterial);
-  pillar.position.set(p.x, baseY + h / 2, p.z);
-  trackGroup.add(pillar);
-  const cap = new THREE.Mesh(new THREE.BoxGeometry(TRACK_WIDTH + 0.5, 0.13, 0.3), supportMaterial);
-  const t = frameAt(s).tangent;
-  cap.rotation.y = Math.atan2(t.z, t.x);
-  cap.position.copy(p).addScaledVector(UP, -0.46);
-  trackGroup.add(cap);
+const ROOM = { halfX: 86, halfZ: 70, floorY: -23.5, ceilingY: 180 };
+const baseY = ROOM.floorY + 0.5;
+const roomGroup = new THREE.Group();
+scene.add(roomGroup);
+
+const plaster = new THREE.MeshStandardMaterial({ color: 0xc7bcaa, roughness: 0.89 });
+const darkOak = new THREE.MeshStandardMaterial({ color: 0x66432d, roughness: 0.48, metalness: 0.02 });
+const roomTrim = new THREE.MeshStandardMaterial({ color: 0xa2754c, roughness: 0.45 });
+const windowGlass = new THREE.MeshPhysicalMaterial({
+  color: 0x78939a, roughness: 0.24, metalness: 0.16,
+  emissive: 0x718896, emissiveIntensity: 0.2, clearcoat: 0.7
+});
+function roomBox(width, height, depth, x, y, z, material) {
+  const mesh = new THREE.Mesh(new THREE.BoxGeometry(width, height, depth), material);
+  mesh.position.set(x, y, z);
+  roomGroup.add(mesh);
+  return mesh;
 }
 
-const floor = new THREE.Mesh(new THREE.PlaneGeometry(2400, 2400), new THREE.MeshStandardMaterial({ color: 0x1b2026, metalness: 0.07, roughness: 0.88 }));
+const roomHeight = ROOM.ceilingY - ROOM.floorY;
+const midWallY = (ROOM.ceilingY + ROOM.floorY) / 2;
+for (const side of [-1, 1]) {
+  roomBox(ROOM.halfX * 2 + 2, roomHeight, 1.8, 0, midWallY, side * ROOM.halfZ, plaster);
+  roomBox(1.8, roomHeight, ROOM.halfZ * 2 + 2, side * ROOM.halfX, midWallY, 0, plaster);
+  // Wood-paneled lower walls and two raised architectural cornices.
+  roomBox(ROOM.halfX * 2, 24, 0.72, 0, ROOM.floorY + 12, side * (ROOM.halfZ - 1.15), darkOak);
+  roomBox(0.72, 24, ROOM.halfZ * 2, side * (ROOM.halfX - 1.15), ROOM.floorY + 12, 0, darkOak);
+  for (const y of [ROOM.floorY + 24, 53, 153]) {
+    roomBox(ROOM.halfX * 2, 1.15, 1.2, 0, y, side * (ROOM.halfZ - 1.4), roomTrim);
+    roomBox(1.2, 1.15, ROOM.halfZ * 2, side * (ROOM.halfX - 1.4), y, 0, roomTrim);
+  }
+}
+
+// The tall framed windows and pilasters stay visible while the camera follows
+// the high-level wall run, establishing that this is an enclosed race hall.
+function roomWindow(offset, wallSide, isZWall) {
+  const y = 110;
+  const width = 13;
+  const height = 35;
+  const position = wallSide * ((isZWall ? ROOM.halfZ : ROOM.halfX) - 1.22);
+  const x = isZWall ? offset : position;
+  const z = isZWall ? position : offset;
+  const thin = 0.24;
+  roomBox(isZWall ? width : thin, height, isZWall ? thin : width, x, y, z, windowGlass);
+  for (const sideways of [-1, 1]) {
+    roomBox(isZWall ? 0.75 : 0.45, height + 1.4, isZWall ? 0.45 : 0.75,
+      x + (isZWall ? sideways * width / 2 : 0), y,
+      z + (isZWall ? 0 : sideways * width / 2), darkOak);
+    roomBox(isZWall ? width + 1.1 : 0.48, 0.73, isZWall ? 0.48 : width + 1.1,
+      x, y + sideways * height / 2, z, darkOak);
+  }
+  roomBox(isZWall ? 0.56 : 0.38, height, isZWall ? 0.38 : 0.56, x, y, z, roomTrim);
+  roomBox(isZWall ? width : 0.38, 0.62, isZWall ? 0.38 : width, x, y + 1, z, roomTrim);
+}
+for (const side of [-1, 1]) {
+  for (const x of [-61, -30, 0, 30, 61]) roomWindow(x, side, true);
+  for (const z of [-45, -15, 15, 45]) roomWindow(z, side, false);
+  for (let x = -78; x <= 78; x += 26) {
+    roomBox(1.35, roomHeight - 2, 1.25, x, midWallY, side * (ROOM.halfZ - 1.6), roomTrim);
+  }
+  for (let z = -60; z <= 60; z += 24) {
+    roomBox(1.25, roomHeight - 2, 1.35, side * (ROOM.halfX - 1.6), midWallY, z, roomTrim);
+  }
+}
+
+const floorGrain = oakGrain.clone();
+floorGrain.repeat.set(10, 8);
+floorGrain.needsUpdate = true;
+const floor = new THREE.Mesh(new THREE.PlaneGeometry(ROOM.halfX * 2, ROOM.halfZ * 2),
+  new THREE.MeshStandardMaterial({ map: floorGrain, color: 0xb6a18b, roughness: 0.64 }));
 floor.rotation.x = -Math.PI / 2;
-floor.position.y = baseY - 0.5;
-scene.add(floor);
+floor.position.y = ROOM.floorY;
+roomGroup.add(floor);
+roomBox(ROOM.halfX * 2, 1.5, ROOM.halfZ * 2, 0, ROOM.ceilingY, 0, plaster);
+for (let z = -57; z <= 57; z += 19) {
+  roomBox(ROOM.halfX * 2, 1.7, 1.8, 0, ROOM.ceilingY - 1.2, z, darkOak);
+}
+for (const x of [-42, 0, 42]) {
+  for (const z of [-33, 33]) {
+    const lamp = new THREE.Mesh(new THREE.TorusGeometry(5, 0.32, 8, 32),
+      new THREE.MeshStandardMaterial({ color: 0xf6dfae, emissive: 0xffc985, emissiveIntensity: 1.35 }));
+    lamp.rotation.x = Math.PI / 2;
+    lamp.position.set(x, ROOM.ceilingY - 4.5, z);
+    roomGroup.add(lamp);
+  }
+}
+
+function supportBeam(from, to, radius) {
+  const direction = to.clone().sub(from);
+  const beam = new THREE.Mesh(new THREE.CylinderGeometry(radius, radius, direction.length(), 8), supportMaterial);
+  beam.position.copy(from).addScaledVector(direction, 0.5);
+  beam.quaternion.setFromUnitVectors(UP, direction.normalize());
+  trackGroup.add(beam);
+}
+
+// Wall-side sections use cantilevered brackets. The inward turns stand on
+// slimmer posts, so neither stretch appears to hover unsupported in the room.
+for (let s = 12; s < trackLength; s += 24) {
+  const p = worldAt(s, 0);
+  const t = frameAt(s).tangent;
+  const cap = new THREE.Mesh(new THREE.BoxGeometry(TRACK_WIDTH + 0.5, 0.16, 0.48), supportMaterial);
+  cap.rotation.y = Math.atan2(t.x, t.z);
+  cap.position.copy(p).addScaledVector(UP, -0.5);
+  trackGroup.add(cap);
+  const dx = ROOM.halfX - Math.abs(p.x);
+  const dz = ROOM.halfZ - Math.abs(p.z);
+  if (Math.min(dx, dz) < 28) {
+    const mount = p.clone();
+    if (dx < dz) mount.x = Math.sign(p.x) * (ROOM.halfX - 1.6);
+    else mount.z = Math.sign(p.z) * (ROOM.halfZ - 1.6);
+    mount.y -= 3.6;
+    supportBeam(p.clone().addScaledVector(UP, -0.48), mount, 0.31);
+    roomBox(1.5, 3.0, 1.5, mount.x, mount.y, mount.z, darkOak);
+  } else {
+    const height = p.y - baseY;
+    if (height <= 0) continue;
+    const pillar = new THREE.Mesh(new THREE.CylinderGeometry(0.3, 0.44, height, 8), supportMaterial);
+    pillar.position.set(p.x, baseY + height / 2, p.z);
+    trackGroup.add(pillar);
+  }
+}
 
 const obstacles = [];
 const obstacleMaterial = new THREE.MeshPhysicalMaterial({ color: 0x844b2e, metalness: 0.03, roughness: 0.34, clearcoat: 0.65 });
@@ -374,6 +487,9 @@ function labelTexture(tier) {
 function createMarbleMesh(racer) {
   const group = new THREE.Group();
   const spin = new THREE.Group();
+  // Each marble starts with a different static swirl orientation. Subsequent
+  // motion is integrated as physical rolling, not scripted Euler-axis spin.
+  spin.quaternion.setFromAxisAngle(new THREE.Vector3(0.34, 0.83, 0.44).normalize(), racer.roll);
   group.add(spin);
   const material = new THREE.MeshPhysicalMaterial({
     map: makeSwirlTexture(racer.identity), color: 0xffffff, metalness: 0.03,
@@ -452,7 +568,8 @@ function createRacers() {
       bias: rand() * TWO_PI, roll: rand() * TWO_PI,
       alive: true, finished: false, finishTime: null,
       lastObstacle: -1, lastObstacleTime: -100,
-      group: null, spin: null, shell: null, number: null
+      group: null, spin: null, shell: null, number: null,
+      lastRenderedPosition: null
     };
     createMarbleMesh(racer);
     racers.push(racer);
@@ -659,17 +776,45 @@ function updateParticles(dt) {
   }
 }
 
+const rollPosition = new THREE.Vector3();
+const rollSide = new THREE.Vector3();
+const rollNormal = new THREE.Vector3();
+const rollDisplacement = new THREE.Vector3();
+const rollAxis = new THREE.Vector3();
+const rollQuaternion = new THREE.Quaternion();
+
 function updateMarbleMeshes(dt, alpha) {
   for (const racer of racers) {
     if (!racer.alive) continue;
     const s = THREE.MathUtils.lerp(racer.prevS, racer.s, alpha);
     const lane = THREE.MathUtils.lerp(racer.prevLane, racer.lane, alpha);
     racer.visibleRadius += (racer.radius - racer.visibleRadius) * (1 - Math.exp(-dt * 13));
-    racer.group.position.copy(marbleCenterAt(s, lane, racer.visibleRadius));
+    rollPosition.copy(marbleCenterAt(s, lane, racer.visibleRadius));
+    if (racer.lastRenderedPosition) {
+      const frame = frameAt(s);
+      const centerRadius = Math.max(0.75, TROUGH_RADIUS - racer.visibleRadius);
+      const laneAngle = Math.asin(THREE.MathUtils.clamp(lane / centerRadius,
+        -Math.sin(TROUGH_HALF_ANGLE), Math.sin(TROUGH_HALF_ANGLE)));
+      rollSide.copy(frame.normal).multiplyScalar(Math.cos(laneAngle))
+        .addScaledVector(UP, Math.sin(laneAngle));
+      rollNormal.crossVectors(rollSide, frame.tangent).normalize();
+      rollDisplacement.subVectors(rollPosition, racer.lastRenderedPosition);
+      // Contact-point velocity is tangent to the curved wooden surface.
+      rollDisplacement.addScaledVector(rollNormal, -rollDisplacement.dot(rollNormal));
+      const rollingDistance = rollDisplacement.length();
+      if (rollingDistance > 0.00001) {
+        rollAxis.crossVectors(rollNormal, rollDisplacement).normalize();
+        const angle = rollingDistance / Math.max(0.1, racer.visibleRadius);
+        rollQuaternion.setFromAxisAngle(rollAxis, angle);
+        racer.spin.quaternion.premultiply(rollQuaternion);
+        racer.roll += angle;
+      }
+    }
+    if (!racer.lastRenderedPosition) racer.lastRenderedPosition = new THREE.Vector3();
+    racer.lastRenderedPosition.copy(rollPosition);
+    racer.group.position.copy(rollPosition);
     racer.spin.scale.setScalar(racer.visibleRadius);
     racer.number.scale.setScalar(racer.visibleRadius * 2.4);
-    racer.roll += Math.max(0, racer.v * dt) / Math.max(0.1, racer.visibleRadius);
-    racer.spin.rotation.set(racer.roll, racer.roll * 0.17, racer.roll * 0.5);
     racer.group.visible = !(cameraMode === 'onboard' && racer.id === selectedRacer()?.id);
   }
 }
@@ -799,7 +944,7 @@ function restart() {
   raceTime = 0;
   totalMerges = 0;
   accumulator = 0;
-  calloutTitle.textContent = 'THE OAK DOWNHILL';
+  calloutTitle.textContent = 'THE OAK RACE HALL';
   calloutSubtitle.textContent = 'Matching numbers combine. First across wins.';
   playButton.innerHTML = 'Ⅱ <span>PAUSE</span>';
   updateColors();
@@ -842,8 +987,9 @@ function animate(now) {
     // Avoid a spiral of death if the tab or the device is overloaded.
     if (substeps >= 14) accumulator = 0;
   }
-  updateMarbleMeshes(elapsed, Math.min(1, accumulator / FIXED_STEP));
-  updateProgressMarkers(Math.min(1, accumulator / FIXED_STEP));
+  const renderAlpha = raceStatus === 'running' ? Math.min(1, accumulator / FIXED_STEP) : 1;
+  updateMarbleMeshes(elapsed, renderAlpha);
+  updateProgressMarkers(renderAlpha);
   updateParticles(elapsed);
   updateCamera(elapsed);
   if (now - lastHudTime > 150) { updateHud(); lastHudTime = now; }
