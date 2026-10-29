@@ -203,7 +203,7 @@ function troughGeometry(curve,width=1.35,samples=100,slices=14){
     const curvature=delta/chord;
     // Rotate the entire 90-degree U-section into a banked corner. Both lips
     // remain open, so excessive lateral momentum can still throw a ball off.
-    const bank=clamp(Math.atan(22*22*curvature/17),-.72,.72);
+    const bank=clamp(Math.atan(14*14*curvature/17),-.44,.44);
     const bankedCross=cross.clone().multiplyScalar(Math.cos(bank)).add(new THREE.Vector3(0,Math.sin(bank),0));
     const bankedUp=new THREE.Vector3(0,Math.cos(bank),0).addScaledVector(cross,-Math.sin(bank));
     for(let j=0;j<=slices;j++){
@@ -220,14 +220,30 @@ function troughGeometry(curve,width=1.35,samples=100,slices=14){
   g.setAttribute('uv',new THREE.Float32BufferAttribute(uvs,2));g.setIndex(indices);g.computeVertexNormals();
   return {geometry:g,edgeA,edgeB};
 }
+function edgeGuardGeometry(edge,height=.43){
+  const vertices=[],uv=[],indices=[];
+  for(let i=0;i<edge.length;i++){
+    const p=edge[i];vertices.push(p.x,p.y,p.z,p.x,p.y+height,p.z);
+    uv.push(i/12,0,i/12,1);
+    if(i>0){const a=(i-1)*2,b=i*2;indices.push(a,b,a+1,b,b+1,a+1);}
+  }
+  const geom=new THREE.BufferGeometry();
+  geom.setAttribute('position',new THREE.Float32BufferAttribute(vertices,3));
+  geom.setAttribute('uv',new THREE.Float32BufferAttribute(uv,2));
+  geom.setIndex(indices);geom.computeVertexNormals();
+  return geom;
+}
 function addTrough(points,width,seed){
   const curve=makeSpline(points);
   const data=troughGeometry(curve,width,Math.ceil(curve.getLength()*2.5));
   mesh(data.geometry,basicWood(seed));
   collisionFromGeometry(data.geometry,null,.48);
   for(const edge of [data.edgeA,data.edgeB]){
-    const curve=new THREE.CatmullRomCurve3(edge,false,'centripetal');
-    mesh(new THREE.TubeGeometry(curve,180,.047,6,false),brass);
+    const guard=edgeGuardGeometry(edge,.43);
+    mesh(guard,basicWood(seed+21));
+    collisionFromGeometry(guard,null,.54);
+    const rimCurve=new THREE.CatmullRomCurve3(edge.map(p=>p.clone().add(new THREE.Vector3(0,.43,0))),false,'centripetal');
+    mesh(new THREE.TubeGeometry(rimCurve,180,.031,6,false),brass);
   }
   const bracketCount=Math.max(6,Math.ceil(curve.getLength()/22));
   for(let i=0;i<bracketCount;i++){
@@ -597,9 +613,13 @@ async function runCourseSelfTest(){
     const indices=new Uint32Array(g.getIndex().array);
     w.createCollider(RAPIER.ColliderDesc.trimesh(vertices,indices).setFriction(friction).setRestitution(.06),fixed);
   };
-  addGeometry(troughGeometry(upperCurve,1.51,Math.ceil(upperLength*2.5)).geometry,.48);
+  const upperData=troughGeometry(upperCurve,1.51,Math.ceil(upperLength*2.5));
+  addGeometry(upperData.geometry,.48);
+  for(const edge of [upperData.edgeA,upperData.edgeB])addGeometry(edgeGuardGeometry(edge,.43),.54);
   const lower=makeSpline(LOWER_POINTS);
-  addGeometry(troughGeometry(lower,1.44,Math.ceil(lower.getLength()*2.5)).geometry,.48);
+  const lowerData=troughGeometry(lower,1.44,Math.ceil(lower.getLength()*2.5));
+  addGeometry(lowerData.geometry,.48);
+  for(const edge of [lowerData.edgeA,lowerData.edgeB])addGeometry(edgeGuardGeometry(edge,.43),.54);
   const profile=[];
   for(let i=0;i<=54;i++){
     const r=lerp(FUNNEL.inner,FUNNEL.r,i/54);
