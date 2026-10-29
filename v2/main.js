@@ -387,7 +387,7 @@ function startMarbles(){
   const track=upperCurve;
   for(let i=0;i<START_COUNT;i++){
     const row=Math.floor(i/3),col=i%3;
-    const t=(.4+row*.87)/upperLength,p=track.getPointAt(t),tangent=track.getTangentAt(t);
+    const t=(.4+row*2.1)/upperLength,p=track.getPointAt(t),tangent=track.getTangentAt(t);
     const lateral=new THREE.Vector3(tangent.z,0,-tangent.x).normalize();
     const a=(col-1)*.72,at=p.clone().addScaledVector(lateral,a);
     at.y+=.32+1.51*(1-Math.sqrt(1-Math.pow(a/1.51,2)))+.025;
@@ -698,7 +698,7 @@ async function runCourseSelfTest(){
   const cohort=[];
   for(let i=0;i<START_COUNT;i++){
     const row=Math.floor(i/3),col=i%3;
-    const t=(.4+row*.87)/upperLength,p=upperCurve.getPointAt(t);
+    const t=(.4+row*2.1)/upperLength,p=upperCurve.getPointAt(t);
     const tangent=upperCurve.getTangentAt(t);
     const lateral=new THREE.Vector3(tangent.z,0,-tangent.x).normalize();
     const lane=(col-1)*.72;
