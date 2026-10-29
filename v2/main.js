@@ -39,7 +39,7 @@ const upperPositions=Array.from({length:UPPER_SAMPLES+1},(_,i)=>upperCurve.getPo
 const clock = new THREE.Clock();
 let simTime=0, raceSpeed=1, paused=false, merges=0, finished=0;
 let accumulator=0, followId=0, viewMode='follow', toastUntil=0;
-let marbles=[], particles=[], rotor=null, rotorMesh=null;
+let marbles=[], particles=[], rotor=null, rotorMesh=null, pendulums=[];
 let world, scene, camera, renderer;
 let nextId=0, selected=null;
 const tempV=new THREE.Vector3();
@@ -315,9 +315,38 @@ function buildWheel(){
   // Fixed wing supports are non-spinning; only the four contact paddles can rotate.
   rotor=rb;rotorMesh=group;
 }
+function createPendulumGate(physicsWorld,location,direction,withVisual){
+  const pivot=new THREE.Vector3(location.x,location.y+3.55,location.z);
+  const axis=new THREE.Vector3(direction.z,0,-direction.x).normalize();
+  const anchor=physicsWorld.createRigidBody(RAPIER.RigidBodyDesc.fixed().setTranslation(pivot.x,pivot.y,pivot.z));
+  const body=physicsWorld.createRigidBody(RAPIER.RigidBodyDesc.dynamic()
+    .setTranslation(pivot.x,pivot.y,pivot.z).setLinearDamping(.55).setAngularDamping(.20));
+  const hinge=RAPIER.JointData.revolute({x:0,y:0,z:0},{x:0,y:0,z:0},bodyVec(axis));
+  physicsWorld.createImpulseJoint(hinge,anchor,body,true);
+  physicsWorld.createCollider(RAPIER.ColliderDesc.cuboid(.085,1.36,.085)
+    .setTranslation(0,-1.36,0).setDensity(.15).setFriction(.65),body);
+  physicsWorld.createCollider(RAPIER.ColliderDesc.ball(.52)
+    .setTranslation(0,-2.91,0).setDensity(.30).setFriction(.59).setRestitution(.15),body);
+  if(!withVisual)return {body};
+  const group=new THREE.Group();group.position.copy(pivot);scene.add(group);
+  const rod=new THREE.Mesh(new THREE.CylinderGeometry(.09,.09,2.73,14),darkIron);
+  rod.position.y=-1.36;rod.castShadow=true;group.add(rod);
+  const bob=new THREE.Mesh(new THREE.SphereGeometry(.52,24,16),basicWood(774));
+  bob.position.y=-2.91;bob.castShadow=true;bob.receiveShadow=true;group.add(bob);
+  const band=new THREE.Mesh(new THREE.TorusGeometry(.28,.075,8,24),brass);
+  band.rotation.x=Math.PI/2;band.position.y=-2.91;group.add(band);
+  const pivotHub=new THREE.Mesh(new THREE.SphereGeometry(.28,16,12),brass);
+  group.add(pivotHub);
+  const supportEnd=pivot.clone().addScaledVector(axis,2.5);
+  lineCylinder(pivot,supportEnd,.13,darkIron);
+  pendulums.push({body,group,pivot});
+  return {body,group};
+}
 function buildCourse(){
   addTrough(UPPER_POINTS,1.51,111);
   buildFunnel();
+  const gateT=.76,gateP=upperCurve.getPointAt(gateT),gateDir=upperCurve.getTangentAt(gateT);
+  createPendulumGate(world,gateP,gateDir,true);
   addTrough(LOWER_POINTS,1.44,119);
   buildWheel();
   // Finish banner suspended above the final physical track.
@@ -394,7 +423,11 @@ function setupControls(){
   syncViewButtons();
 }
 function syncViewButtons(){for(const name of ['follow','wide','inside'])$(name).classList.toggle('active',viewMode===name);}
-function resetState(){marbles.slice().forEach(removeMarble);marbles=[];if(rotor){rotor.setLinvel({x:0,y:0,z:0},true);rotor.setAngvel({x:0,y:0,z:0},true);rotor.setTranslation({x:17,y:-6.6,z:-8},true);rotor.setRotation({x:0,y:0,z:0,w:1},true);}simTime=0;merges=0;finished=0;accumulator=0;nextId=0;startMarbles();$('toast').classList.remove('visible');}
+function resetState(){marbles.slice().forEach(removeMarble);marbles=[];if(rotor){rotor.setLinvel({x:0,y:0,z:0},true);rotor.setAngvel({x:0,y:0,z:0},true);rotor.setTranslation({x:17,y:-6.6,z:-8},true);rotor.setRotation({x:0,y:0,z:0,w:1},true);}for(const gate of pendulums){
+    gate.body.setLinvel({x:0,y:0,z:0},true);gate.body.setAngvel({x:0,y:0,z:0},true);
+    gate.body.setTranslation(bodyVec(gate.pivot),true);
+    gate.body.setRotation({x:0,y:0,z:0,w:1},true);
+  }simTime=0;merges=0;finished=0;accumulator=0;nextId=0;startMarbles();$('toast').classList.remove('visible');}
 function restart(){resetState();paused=false;$('pause').textContent='Ⅱ PAUSE';showToast('NEW RACE · 32 MARBLES');}
 function mergePair(a,b){
   const pa=a.rb.translation(),pb=b.rb.translation(),va=a.rb.linvel(),vb=b.rb.linvel();
@@ -469,6 +502,11 @@ function syncMeshes(){
     const p=rotor.translation(),q=rotor.rotation();
     rotorMesh.position.set(p.x,p.y,p.z);
     rotorMesh.quaternion.set(q.x,q.y,q.z,q.w);
+  }
+  for(const gate of pendulums){
+    const p=gate.body.translation(),q=gate.body.rotation();
+    gate.group.position.set(p.x,p.y,p.z);
+    gate.group.quaternion.set(q.x,q.y,q.z,q.w);
   }
 }
 function updateCamera(dt){
@@ -643,6 +681,8 @@ async function runCourseSelfTest(){
       .setRotation({x:0,y:0,z:Math.sin(a/2),w:Math.cos(a/2)})
       .setDensity(.22).setFriction(.58).setRestitution(.11),rotorBody);
   }
+  const gateT=.76;
+  createPendulumGate(w,upperCurve.getPointAt(gateT),upperCurve.getTangentAt(gateT),false);
   const cohort=[];
   for(let i=0;i<START_COUNT;i++){
     const row=Math.floor(i/3),col=i%3;
