@@ -37,7 +37,7 @@ const upperCurve=new THREE.CatmullRomCurve3(UPPER_POINTS.map(p=>new THREE.Vector
 const upperLength=upperCurve.getLength();
 const upperPositions=Array.from({length:UPPER_SAMPLES+1},(_,i)=>upperCurve.getPointAt(i/UPPER_SAMPLES));
 const clock = new THREE.Clock();
-let simTime=0, raceSpeed=1, paused=false, merges=0, finished=0;
+let simTime=0, raceSpeed=1, paused=false, merges=0, finished=0, winner=null;
 let accumulator=0, followId=0, viewMode='follow', toastUntil=0;
 let marbles=[], particles=[], rotor=null, rotorMesh=null, pendulums=[];
 let world, scene, camera, renderer;
@@ -412,7 +412,10 @@ function setupControls(){
   });
   for(const mode of ['follow','wide','inside'])$(''+mode).addEventListener('click',()=>{viewMode=mode;syncViewButtons();});
   $('speed').addEventListener('click',()=>{raceSpeed=raceSpeed===1?1.5:raceSpeed===1.5?2:1;$('speed').textContent=raceSpeed+'×';});
-  $('pause').addEventListener('click',()=>{paused=!paused;$('pause').textContent=paused?'▶ RESUME':'Ⅱ PAUSE';});
+  $('pause').addEventListener('click',()=>{
+    if(simTime>=120||marbles.every(m=>m.finished)){restart();return;}
+    paused=!paused;$('pause').textContent=paused?'▶ RESUME':'Ⅱ PAUSE';
+  });
   $('reset').addEventListener('click',()=>restart());
   $('progress').addEventListener('pointerdown',e=>{
     const r=$('progress').getBoundingClientRect(),fraction=clamp((e.clientX-r.left)/r.width,0,1);
@@ -427,7 +430,7 @@ function resetState(){marbles.slice().forEach(removeMarble);marbles=[];if(rotor)
     gate.body.setLinvel({x:0,y:0,z:0},true);gate.body.setAngvel({x:0,y:0,z:0},true);
     gate.body.setTranslation(bodyVec(gate.pivot),true);
     gate.body.setRotation({x:0,y:0,z:0,w:1},true);
-  }simTime=0;merges=0;finished=0;accumulator=0;nextId=0;startMarbles();$('toast').classList.remove('visible');}
+  }simTime=0;merges=0;finished=0;winner=null;accumulator=0;nextId=0;startMarbles();$('toast').classList.remove('visible');}
 function restart(){resetState();paused=false;$('pause').textContent='Ⅱ PAUSE';showToast('NEW RACE · 32 MARBLES');}
 function mergePair(a,b){
   const pa=a.rb.translation(),pb=b.rb.translation(),va=a.rb.linvel(),vb=b.rb.linvel();
@@ -482,7 +485,10 @@ function updateProgress(m){
   m.progress=Math.max(m.progress,candidate);
   if(m.stage==='lower'&&p.x>32.5&&p.y< -9){
     m.finished=true;m.progress=1;finished++;
-    if(m===selected)showToast('FINISH · '+palette[m.color].name.toUpperCase()+' · '+formatTime(simTime),4);
+    if(!winner){
+      winner={name:palette[m.color].name,time:simTime,id:m.id};
+      showToast('WINNER · '+winner.name.toUpperCase()+' · '+formatTime(simTime),4);
+    }else if(m===selected)showToast('FINISH · '+palette[m.color].name.toUpperCase()+' · '+formatTime(simTime),2.8);
   }
   // Falling off is an elimination, not an error to auto-correct.
   if(p.y<room.ground+1.15){m.offCourseTime+=STEP;}else{m.offCourseTime=0;}
@@ -571,6 +577,12 @@ function tick(){
       simTime+=STEP;
       for(const m of marbles)updateProgress(m);
       maybeMerge();
+      if(simTime>=120||marbles.every(m=>m.finished)){
+        for(const m of marbles)if(!m.finished){m.finished=true;m.dnf=true;}
+        paused=true;$('pause').textContent='▶ RESTART';
+        const label=winner?'RACE OVER · '+winner.name.toUpperCase()+' WON IN '+formatTime(winner.time):'RACE OVER · NO FINISHERS';
+        showToast(label,12);
+      }
       accumulator-=STEP;count++;
     }
     if(count===8)accumulator=Math.min(accumulator,STEP);
@@ -702,7 +714,7 @@ async function runCourseSelfTest(){
   }
   let steps=0,contacts=0;
   const stopped=()=>cohort.every(m=>m.ended);
-  const runMax=160;
+  const runMax=120;
   while(steps<runMax/STEP&&!stopped()){
     const batch=Math.min(360,Math.floor(runMax/STEP)-steps);
     for(let i=0;i<batch;i++){
@@ -753,7 +765,12 @@ async function runCourseSelfTest(){
     falls:cohort.filter(m=>m.fallen).length,
     stillRacing:cohort.filter(m=>!m.ended).length,
     firstFinish:+Math.min(...cohort.filter(m=>m.finish).map(m=>m.time)).toFixed(1),
-    fallSamples:cohort.filter(m=>m.fallen).sort((a,b)=>a.time-b.time).slice(0,6).map(m=>m.failure)};
+    fallSamples:cohort.filter(m=>m.fallen).sort((a,b)=>a.time-b.time).slice(0,6).map(m=>m.failure),
+    dnfSamples:cohort.filter(m=>!m.ended).slice(0,8).map(m=>{
+      const p=m.rb.translation(),v=m.rb.linvel();
+      return {id:m.id,stage:m.stage,x:+p.x.toFixed(1),y:+p.y.toFixed(1),z:+p.z.toFixed(1),
+        speed:+Math.hypot(v.x,v.y,v.z).toFixed(2)};
+    })};
   const success=result.finishers>0;
   setLoading((success?'FULL-COURSE PHYSICS TEST PASS · ':'FULL-COURSE PHYSICS TEST REQUIRES TUNING · ')+JSON.stringify(result));
   loading.classList.toggle('error',!success);
