@@ -513,7 +513,8 @@ function syncMeshes(){
     const p=m.rb.translation(),q=m.rb.rotation();
     m.group.position.set(p.x,p.y,p.z);
     m.group.quaternion.set(q.x,q.y,q.z,q.w);
-    m.group.visible=!m.finished||m.progress===1;
+    // DNFs stay in place when the clock expires; only off-track eliminations vanish.
+    m.group.visible=!m.eliminated;
   }
   if(rotor&&rotorMesh){
     const p=rotor.translation(),q=rotor.rotation();
