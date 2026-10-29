@@ -220,12 +220,16 @@ function troughGeometry(curve,width=1.35,samples=100,slices=14){
   g.setAttribute('uv',new THREE.Float32BufferAttribute(uvs,2));g.setIndex(indices);g.computeVertexNormals();
   return {geometry:g,edgeA,edgeB};
 }
-function edgeGuardGeometry(edge,height=.43){
+function edgeGuardGeometry(edge,height=.43,openPaddleSide=false){
   const vertices=[],uv=[],indices=[];
   for(let i=0;i<edge.length;i++){
     const p=edge[i];vertices.push(p.x,p.y,p.z,p.x,p.y+height,p.z);
     uv.push(i/12,0,i/12,1);
-    if(i>0){const a=(i-1)*2,b=i*2;indices.push(a,b,a+1,b,b+1,a+1);}
+    if(i>0){
+      const x0=edge[i-1].x,x1=p.x;
+      const atWheel=openPaddleSide&&(Math.max(x0,x1)>13.5&&Math.min(x0,x1)<20.5);
+      if(!atWheel){const a=(i-1)*2,b=i*2;indices.push(a,b,a+1,b,b+1,a+1);}
+    }
   }
   const geom=new THREE.BufferGeometry();
   geom.setAttribute('position',new THREE.Float32BufferAttribute(vertices,3));
@@ -239,11 +243,18 @@ function addTrough(points,width,seed){
   mesh(data.geometry,basicWood(seed));
   collisionFromGeometry(data.geometry,null,.48);
   for(const edge of [data.edgeA,data.edgeB]){
-    const guard=edgeGuardGeometry(edge,.43);
+    const opening=seed===119&&edge===data.edgeA;
+    const guard=edgeGuardGeometry(edge,.43,opening);
     mesh(guard,basicWood(seed+21));
     collisionFromGeometry(guard,null,.54);
-    const rimCurve=new THREE.CatmullRomCurve3(edge.map(p=>p.clone().add(new THREE.Vector3(0,.43,0))),false,'centripetal');
-    mesh(new THREE.TubeGeometry(rimCurve,180,.031,6,false),brass);
+    const rimSections=opening
+      ?[edge.filter(p=>p.x<13.5),edge.filter(p=>p.x>20.5)]
+      :[edge];
+    for(const section of rimSections){
+      if(section.length<2)continue;
+      const rimCurve=new THREE.CatmullRomCurve3(section.map(p=>p.clone().add(new THREE.Vector3(0,.43,0))),false,'centripetal');
+      mesh(new THREE.TubeGeometry(rimCurve,Math.min(180,section.length*2),.031,6,false),brass);
+    }
   }
   const bracketCount=Math.max(6,Math.ceil(curve.getLength()/22));
   for(let i=0;i<bracketCount;i++){
@@ -669,7 +680,7 @@ async function runCourseSelfTest(){
   const lower=makeSpline(LOWER_POINTS);
   const lowerData=troughGeometry(lower,1.44,Math.ceil(lower.getLength()*2.5));
   addGeometry(lowerData.geometry,.48);
-  for(const edge of [lowerData.edgeA,lowerData.edgeB])addGeometry(edgeGuardGeometry(edge,.43),.54);
+  for(const edge of [lowerData.edgeA,lowerData.edgeB])addGeometry(edgeGuardGeometry(edge,.43,edge===lowerData.edgeA),.54);
   const profile=[];
   for(let i=0;i<=54;i++){
     const r=lerp(FUNNEL.inner,FUNNEL.r,i/54);
@@ -712,7 +723,7 @@ async function runCourseSelfTest(){
     cohort.push({id:i,rb,stage:'approach',funnel:false,drained:false,paddle:false,
       ended:false,finish:false,fallen:false,time:0});
   }
-  let steps=0,contacts=0,wheelAngularTravel=0,wheelPeakSpeed=0,previousWheelAngle=0;
+  let steps=0,contacts=0,wheelAngularTravel=0,wheelAbsoluteTravel=0,wheelPeakSpeed=0,previousWheelAngle=0;
   const stopped=()=>cohort.every(m=>m.ended);
   const runMax=120;
   while(steps<runMax/STEP&&!stopped()){
@@ -721,7 +732,8 @@ async function runCourseSelfTest(){
       w.step();steps++;
       const wheelQ=rotorBody.rotation(),wheelOmega=rotorBody.angvel().z;
       const wheelAngle=2*Math.atan2(wheelQ.z,wheelQ.w);
-      wheelAngularTravel+=Math.atan2(Math.sin(wheelAngle-previousWheelAngle),Math.cos(wheelAngle-previousWheelAngle));
+      const wheelDelta=Math.atan2(Math.sin(wheelAngle-previousWheelAngle),Math.cos(wheelAngle-previousWheelAngle));
+      wheelAngularTravel+=wheelDelta;wheelAbsoluteTravel+=Math.abs(wheelDelta);
       previousWheelAngle=wheelAngle;wheelPeakSpeed=Math.max(wheelPeakSpeed,Math.abs(wheelOmega));
       const elapsed=steps*STEP;
       for(const m of cohort){
@@ -766,6 +778,7 @@ async function runCourseSelfTest(){
     rotorAngle:+(2*Math.atan2(rotorQ.z,rotorQ.w)).toFixed(2),
     rotorAngularSpeed:+rotorV.z.toFixed(2),
     wheelRevolutions:+(Math.abs(wheelAngularTravel)/(2*Math.PI)).toFixed(2),
+    wheelTotalTravelTurns:+(wheelAbsoluteTravel/(2*Math.PI)).toFixed(2),
     wheelPeakSpeed:+wheelPeakSpeed.toFixed(2),
     wheelWaiters:cohort.filter(m=>!m.ended&&m.stage==='lower'&&m.rb.translation().x>12&&m.rb.translation().x<16).length,
     start:START_COUNT,enteredFunnel:cohort.filter(m=>m.funnel).length,
