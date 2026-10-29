@@ -289,21 +289,21 @@ function buildFunnel(){
 function buildWheel(){
   const center=new THREE.Vector3(17,-6.6,-8);
   const staticBody=world.createRigidBody(RAPIER.RigidBodyDesc.fixed().setTranslation(center.x,center.y,center.z));
-  const rb=world.createRigidBody(RAPIER.RigidBodyDesc.dynamic().setTranslation(center.x,center.y,center.z).setLinearDamping(.8).setAngularDamping(.45));
+  const rb=world.createRigidBody(RAPIER.RigidBodyDesc.dynamic().setTranslation(center.x,center.y,center.z).setLinearDamping(.8).setAngularDamping(.14));
   const joint=RAPIER.JointData.revolute({x:0,y:0,z:0},{x:0,y:0,z:0},{x:0,y:0,z:1});
   world.createImpulseJoint(joint,staticBody,rb,true);
   const group=new THREE.Group();group.position.copy(center);scene.add(group);
   for(let i=0;i<4;i++){
     const a=i*Math.PI/2,axis=new THREE.Vector3(Math.cos(a),Math.sin(a),0);
-    const desc=RAPIER.ColliderDesc.cuboid(1.05,.245,.65)
-      .setTranslation(axis.x*1.12,axis.y*1.12,0)
+    const desc=RAPIER.ColliderDesc.cuboid(.85,.20,.61)
+      .setTranslation(axis.x*1.08,axis.y*1.08,0)
       .setRotation({x:0,y:0,z:Math.sin(a/2),w:Math.cos(a/2)})
-      .setDensity(.22).setFriction(.58).setRestitution(.11);
+      .setDensity(.14).setFriction(.58).setRestitution(.11);
     world.createCollider(desc,rb);
-    const blade=new THREE.Mesh(new THREE.BoxGeometry(2.1,.49,1.3),basicWood(319+i));
-    blade.position.set(axis.x*1.12,axis.y*1.12,0);blade.rotation.z=a;blade.castShadow=true;blade.receiveShadow=true;group.add(blade);
-    const copper=new THREE.Mesh(new THREE.BoxGeometry(2.1,.06,1.33),brass);
-    copper.position.set(axis.x*1.12,axis.y*1.12,0);copper.rotation.z=a;group.add(copper);
+    const blade=new THREE.Mesh(new THREE.BoxGeometry(1.7,.4,1.22),basicWood(319+i));
+    blade.position.set(axis.x*1.08,axis.y*1.08,0);blade.rotation.z=a;blade.castShadow=true;blade.receiveShadow=true;group.add(blade);
+    const copper=new THREE.Mesh(new THREE.BoxGeometry(1.7,.06,1.24),brass);
+    copper.position.set(axis.x*1.08,axis.y*1.08,0);copper.rotation.z=a;group.add(copper);
   }
   const hub=new THREE.Mesh(new THREE.CylinderGeometry(.43,.43,1.7,24),brass);
   hub.rotation.x=Math.PI/2;hub.castShadow=true;group.add(hub);
@@ -387,7 +387,7 @@ function startMarbles(){
   const track=upperCurve;
   for(let i=0;i<START_COUNT;i++){
     const row=Math.floor(i/3),col=i%3;
-    const t=(.4+row*2.1)/upperLength,p=track.getPointAt(t),tangent=track.getTangentAt(t);
+    const t=(.4+row*.87)/upperLength,p=track.getPointAt(t),tangent=track.getTangentAt(t);
     const lateral=new THREE.Vector3(tangent.z,0,-tangent.x).normalize();
     const a=(col-1)*.72,at=p.clone().addScaledVector(lateral,a);
     at.y+=.32+1.51*(1-Math.sqrt(1-Math.pow(a/1.51,2)))+.025;
@@ -604,9 +604,9 @@ async function runPhysicsSelfTest(){
   const rotating=w.createRigidBody(RAPIER.RigidBodyDesc.dynamic().setLinearDamping(.8).setAngularDamping(.5));
   const joint=RAPIER.JointData.revolute({x:0,y:0,z:0},{x:0,y:0,z:0},{x:0,y:0,z:1});
   w.createImpulseJoint(joint,anchor,rotating,true);
-  w.createCollider(RAPIER.ColliderDesc.cuboid(1.05,.245,.65)
-    .setTranslation(1.12,0,0).setRotation({x:0,y:0,z:0,w:1})
-    .setDensity(.22).setFriction(.6).setRestitution(.1),rotating);
+  w.createCollider(RAPIER.ColliderDesc.cuboid(.85,.20,.61)
+    .setTranslation(1.08,0,0).setRotation({x:0,y:0,z:0,w:1})
+    .setDensity(.14).setFriction(.6).setRestitution(.1),rotating);
   const floor=w.createRigidBody(RAPIER.RigidBodyDesc.fixed());
   w.createCollider(RAPIER.ColliderDesc.trimesh(
     new Float32Array([-4,-3,-4,4,-3,-4,4,-3,4,-4,-3,4]),
@@ -683,22 +683,22 @@ async function runCourseSelfTest(){
   const center={x:17,y:-6.6,z:-8};
   const anchor=w.createRigidBody(RAPIER.RigidBodyDesc.fixed().setTranslation(center.x,center.y,center.z));
   const rotorBody=w.createRigidBody(RAPIER.RigidBodyDesc.dynamic()
-    .setTranslation(center.x,center.y,center.z).setLinearDamping(.8).setAngularDamping(.45));
+    .setTranslation(center.x,center.y,center.z).setLinearDamping(.8).setAngularDamping(.14));
   w.createImpulseJoint(RAPIER.JointData.revolute(
     {x:0,y:0,z:0},{x:0,y:0,z:0},{x:0,y:0,z:1}),anchor,rotorBody,true);
   for(let i=0;i<4;i++){
     const a=i*Math.PI/2;
-    w.createCollider(RAPIER.ColliderDesc.cuboid(1.05,.245,.65)
-      .setTranslation(Math.cos(a)*1.12,Math.sin(a)*1.12,0)
+    w.createCollider(RAPIER.ColliderDesc.cuboid(.85,.20,.61)
+      .setTranslation(Math.cos(a)*1.08,Math.sin(a)*1.08,0)
       .setRotation({x:0,y:0,z:Math.sin(a/2),w:Math.cos(a/2)})
-      .setDensity(.22).setFriction(.58).setRestitution(.11),rotorBody);
+      .setDensity(.14).setFriction(.58).setRestitution(.11),rotorBody);
   }
   const gateT=.76;
   createPendulumGate(w,upperCurve.getPointAt(gateT),upperCurve.getTangentAt(gateT),false);
   const cohort=[];
   for(let i=0;i<START_COUNT;i++){
     const row=Math.floor(i/3),col=i%3;
-    const t=(.4+row*2.1)/upperLength,p=upperCurve.getPointAt(t);
+    const t=(.4+row*.87)/upperLength,p=upperCurve.getPointAt(t);
     const tangent=upperCurve.getTangentAt(t);
     const lateral=new THREE.Vector3(tangent.z,0,-tangent.x).normalize();
     const lane=(col-1)*.72;
