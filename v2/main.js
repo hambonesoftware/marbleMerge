@@ -643,7 +643,7 @@ async function runCourseSelfTest(){
         if(m.ended)continue;
         const p=m.rb.translation();
         const radial=Math.hypot(p.x-FUNNEL.x,p.z-FUNNEL.z);
-        if(m.stage==='approach'&&rad<FUNNEL.r+.8&&p.y<10.7&&p.y>.1){
+        if(m.stage==='approach'&&radial<FUNNEL.r+.8&&p.y<10.7&&p.y>.1){
           m.stage='funnel';m.funnel=true;
         }
         if(m.stage==='funnel'&&p.y< -2.3){
