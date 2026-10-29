@@ -505,7 +505,36 @@ async function runPhysicsSelfTest(){
   for(let i=0;i<240;i++)w.step();
   const q=rotating.rotation(),p=b.translation(),angular=rotating.angvel();
   const valid=[q.x,q.y,q.z,q.w,p.x,p.y,p.z,angular.z].every(Number.isFinite);
-  const result={valid,rotationRadians:2*Math.atan2(q.z,q.w),angularVelocity:angular.z,ballHeight:p.y};
+  // Integrate a tangent-entry sphere against the actual curved funnel
+  // triangle mesh; measure angular travel without assigning any polar orbit.
+  const fw=new RAPIER.World({x:0,y:-17,z:0});fw.timestep=1/120;
+  const profile=[];
+  for(let i=0;i<=54;i++){
+    const r=FUNNEL.inner+(FUNNEL.r-FUNNEL.inner)*i/54;
+    profile.push(new THREE.Vector2(r,FUNNEL.top-FUNNEL.depth*(1-Math.pow(r/FUNNEL.r,1.55))));
+  }
+  const bowl=new THREE.LatheGeometry(profile,112);
+  const vi=bowl.getAttribute('position').array,ii=bowl.getIndex().array;
+  const surface=fw.createRigidBody(RAPIER.RigidBodyDesc.fixed());
+  fw.createCollider(RAPIER.ColliderDesc.trimesh(new Float32Array(vi),new Uint32Array(ii))
+    .setFriction(.38).setRestitution(.06),surface);
+  const runner=fw.createRigidBody(RAPIER.RigidBodyDesc.dynamic()
+    .setTranslation(-9.33,9.91,.0).setCcdEnabled(true)
+    .setLinearDamping(.013).setAngularDamping(.09));
+  fw.createCollider(RAPIER.ColliderDesc.ball(.30).setFriction(.62).setRestitution(.15),runner);
+  runner.setLinvel({x:1.1,y:-.3,z:16.0},true);
+  let previous=Math.atan2(0,-9.33),angularTravel=0,minRadius=100,drained=false,escaped=false,seconds=0;
+  for(let i=0;i<4200;i++){
+    fw.step();seconds+=1/120;
+    const pos=runner.translation(),rad=Math.hypot(pos.x,pos.z);
+    const angle=Math.atan2(pos.z,pos.x);
+    angularTravel+=Math.atan2(Math.sin(angle-previous),Math.cos(angle-previous));
+    previous=angle;minRadius=Math.min(rad,minRadius);
+    if(pos.y<-.75&&rad<2.5){drained=true;break;}
+    if(pos.y< -5 &&rad>FUNNEL.r+2){escaped=true;break;}
+  }
+  const funnelTest={turns:+(Math.abs(angularTravel)/(Math.PI*2)).toFixed(2),minRadius:+minRadius.toFixed(2),drained,escaped,seconds:+seconds.toFixed(2)};
+  const result={valid,rotationRadians:2*Math.atan2(q.z,q.w),angularVelocity:angular.z,ballHeight:p.y,funnelTest};
   setLoading((valid?'PHYSICS SELF-TEST PASS · ':'PHYSICS SELF-TEST FAILED · ')+JSON.stringify(result));
   loading.classList.toggle('error',!valid);
 }
