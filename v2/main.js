@@ -197,9 +197,18 @@ function troughGeometry(curve,width=1.35,samples=100,slices=14){
   for(let i=0;i<=samples;i++){
     const t=i/samples,p=curve.getPoint(t),dir=curve.getTangent(t);
     const cross=new THREE.Vector3(dir.z,0,-dir.x).normalize();
+    const nextT=Math.min(.9999,t+.003),next=curve.getTangent(nextT);
+    const chord=Math.max(.05,p.distanceTo(curve.getPoint(nextT)));
+    const delta=Math.atan2(dir.x*next.z-dir.z*next.x,dir.x*next.x+dir.z*next.z);
+    const curvature=delta/chord;
+    // Rotate the entire 90-degree U-section into a banked corner. Both lips
+    // remain open, so excessive lateral momentum can still throw a ball off.
+    const bank=clamp(Math.atan(22*22*curvature/17),-.72,.72);
+    const bankedCross=cross.clone().multiplyScalar(Math.cos(bank)).add(new THREE.Vector3(0,Math.sin(bank),0));
+    const bankedUp=new THREE.Vector3(0,Math.cos(bank),0).addScaledVector(cross,-Math.sin(bank));
     for(let j=0;j<=slices;j++){
       const a=-Math.PI/4+(j/slices)*(Math.PI/2);
-      const v=p.clone().addScaledVector(cross,Math.sin(a)*width).add(new THREE.Vector3(0,(1-Math.cos(a))*width,0));
+      const v=p.clone().addScaledVector(bankedCross,Math.sin(a)*width).addScaledVector(bankedUp,(1-Math.cos(a))*width);
       vertices.push(v.x,v.y,v.z);uvs.push(t*10,j/slices);
       if(j===0)edgeA.push(v.clone());if(j===slices)edgeB.push(v.clone());
     }
@@ -315,7 +324,7 @@ function spawnMarble({color,tier=1,at,velocity,originalId=null,cooldown=0}){
   const r=radiusForTier(tier),id=originalId===null?nextId++:originalId;
   const rb=world.createRigidBody(RAPIER.RigidBodyDesc.dynamic()
     .setTranslation(at.x,at.y,at.z)
-    .setLinearDamping(.013).setAngularDamping(.09).setCcdEnabled(true));
+     .setLinearDamping(.15*Math.pow(START_RADIUS/r,.38)).setAngularDamping(.09).setCcdEnabled(true));
   const density=5.5*Math.pow(START_RADIUS/r,1.4);
   const desc=RAPIER.ColliderDesc.ball(r).setDensity(density).setFriction(.62).setRestitution(.15);
   world.createCollider(desc,rb);
@@ -624,7 +633,7 @@ async function runCourseSelfTest(){
     p.addScaledVector(lateral,lane);
     p.y+=.345+1.51*(1-Math.sqrt(1-(lane/1.51)**2));
     const rb=w.createRigidBody(RAPIER.RigidBodyDesc.dynamic()
-      .setTranslation(p.x,p.y,p.z).setLinearDamping(.013)
+      .setTranslation(p.x,p.y,p.z).setLinearDamping(.15)
       .setAngularDamping(.09).setCcdEnabled(true));
     w.createCollider(RAPIER.ColliderDesc.ball(START_RADIUS)
       .setDensity(5.5).setFriction(.62).setRestitution(.15),rb);
@@ -655,7 +664,16 @@ async function runCourseSelfTest(){
         }
         if(p.y<room.ground+1.15){
           m.offTime=(m.offTime||0)+STEP;
-          if(m.offTime>1){m.ended=true;m.fallen=true;m.time=elapsed;}
+          if(m.offTime>1){
+            m.ended=true;m.fallen=true;m.time=elapsed;
+            let nearest=0,dist=Infinity;
+            for(let j=0;j<upperPositions.length;j++){
+              const q=upperPositions[j],d=(p.x-q.x)**2+(p.y-q.y)**2+(p.z-q.z)**2;
+              if(d<dist){dist=d;nearest=j;}
+            }
+            m.failure={time:+elapsed.toFixed(1),near: +(nearest/UPPER_SAMPLES*100).toFixed(1),
+              x:+p.x.toFixed(1),z:+p.z.toFixed(1),stage:m.stage};
+          }
         }else m.offTime=0;
       }
     }
@@ -674,7 +692,8 @@ async function runCourseSelfTest(){
     finishers:cohort.filter(m=>m.finish).length,
     falls:cohort.filter(m=>m.fallen).length,
     stillRacing:cohort.filter(m=>!m.ended).length,
-    firstFinish:+Math.min(...cohort.filter(m=>m.finish).map(m=>m.time)).toFixed(1)};
+    firstFinish:+Math.min(...cohort.filter(m=>m.finish).map(m=>m.time)).toFixed(1),
+    fallSamples:cohort.filter(m=>m.fallen).sort((a,b)=>a.time-b.time).slice(0,6).map(m=>m.failure)};
   const success=result.finishers>0;
   setLoading((success?'FULL-COURSE PHYSICS TEST PASS · ':'FULL-COURSE PHYSICS TEST REQUIRES TUNING · ')+JSON.stringify(result));
   loading.classList.toggle('error',!success);
