@@ -1,0 +1,50 @@
+:root{font-family:Inter,system-ui,-apple-system,"Segoe UI",sans-serif;color:#fff4e5;background:#1b1714}
+*{box-sizing:border-box}
+html,body{margin:0;width:100%;height:100%;overflow:hidden;overscroll-behavior:none}
+button{font:inherit;color:inherit;cursor:pointer;touch-action:manipulation}
+button:focus-visible{outline:2px solid #f6b95a;outline-offset:3px}
+#app{position:relative;width:100%;height:100dvh;min-height:420px;overflow:hidden;isolation:isolate;background:#322a25}
+#world,#world canvas{position:absolute;inset:0;width:100%;height:100%;display:block;touch-action:none}
+.shade{position:absolute;inset:0;z-index:1;pointer-events:none;background:linear-gradient(180deg,rgba(18,15,13,.64),transparent 19%,transparent 74%,rgba(18,15,13,.57))}
+.topbar,.progress-panel,.controls,.scene-label,.toast{position:absolute;z-index:3}
+.topbar{top:0;left:0;right:0;display:flex;justify-content:space-between;align-items:center;gap:16px;padding:calc(13px + env(safe-area-inset-top)) 22px 9px;background:linear-gradient(180deg,rgba(25,20,18,.52),transparent)}
+.brand{display:flex;align-items:center;gap:8px;font-size:20px;font-weight:800;letter-spacing:-.065em;white-space:nowrap}
+.brand b{color:#f8c17a}
+.brand small{display:block;font-size:8px;font-weight:750;letter-spacing:.17em;color:#dbbd9e}
+.brand-icon{font-size:28px;color:#eac18b}
+.race-stats{display:flex;gap:16px}
+.race-stats>span{display:flex;flex-direction:column;gap:3px;text-align:right}
+.race-stats small{font-size:8px;letter-spacing:.12em;color:#dfc9b4;font-weight:800}
+.race-stats strong{font-size:19px;font-variant-numeric:tabular-nums}
+.progress-panel{top:calc(69px + env(safe-area-inset-top));left:18px;right:18px;border:1px solid rgba(255,220,169,.26);border-radius:13px;padding:8px 14px 7px;background:rgba(32,26,24,.55);backdrop-filter:blur(16px);box-shadow:0 8px 40px rgba(0,0,0,.12)}
+.progress-header{display:flex;justify-content:space-between;font-size:9px;letter-spacing:.12em;font-weight:800;color:#f4d8b1}
+.progress-line{height:26px;position:relative;margin:2px 8px}
+.progress-rail{position:absolute;left:0;right:0;top:13px;height:3px;border-radius:100px;background:linear-gradient(90deg,#d7ad6d,#f4dfb8);opacity:.8}
+.progress-line::before,.progress-line::after{content:"";position:absolute;top:8px;width:3px;height:13px;background:#fff0d8;border-radius:3px}
+.progress-line::before{left:0}.progress-line::after{right:0}
+.progress-marker{position:absolute;left:var(--p);top:calc(5px + var(--row));transform:translateX(-50%);width:12px;height:12px;border-radius:50%;border:1px solid rgba(255,255,255,.7);box-shadow:0 1px 6px #0007,inset -2px -2px 4px #0005,inset 2px 2px 4px #fff8;background:var(--c);padding:0}
+.progress-marker.selected{width:17px;height:17px;z-index:5;outline:2px solid #fff8d5}
+.progress-marker.gone{opacity:.2}
+.progress-ticks{display:flex;justify-content:space-between;color:#b7a38e;font-size:8px;font-weight:700;letter-spacing:.06em}
+.scene-label{top:26%;left:22px;max-width:210px;text-shadow:0 2px 10px #000b}
+.scene-label strong{font-size:14px;letter-spacing:.05em;display:block;color:#fff4e5}
+.scene-label span{display:block;font-size:11px;margin-top:4px;color:#f7d5a9;line-height:1.35}
+.toast{left:50%;top:38%;transform:translate(-50%,-15%);white-space:nowrap;max-width:95vw;opacity:0;transition:opacity .25s,transform .25s;background:rgba(23,20,19,.78);border:1px solid #f4ce8b87;padding:12px 18px;border-radius:8px;font-size:13px;font-weight:800;letter-spacing:.08em;pointer-events:none;text-align:center}
+.toast.visible{opacity:1;transform:translate(-50%,0)}
+.controls{bottom:calc(15px + env(safe-area-inset-bottom));left:18px;right:18px;display:flex;flex-wrap:wrap;justify-content:space-between;align-items:end;gap:16px;border-radius:15px;border:1px solid rgba(248,214,162,.25);background:rgba(22,19,17,.79);backdrop-filter:blur(18px);padding:13px 17px;box-shadow:0 10px 50px #0008}
+.colors>span{display:block;font-size:9px;letter-spacing:.12em;font-weight:800;margin-bottom:9px;color:#dfc6a9}
+.color-list{display:flex;gap:7px}
+.color-choice{width:26px;height:26px;border-radius:50%;border:2px solid #f9debf99;background:var(--c);box-shadow:inset 3px 3px 6px #fff7,inset -3px -3px 7px #0005}
+.color-choice.selected{outline:2px solid #fef4e2;outline-offset:3px}
+.button-row{display:flex;align-items:center;gap:6px}
+.mode,.minor,.primary{height:35px;border-radius:8px;border:1px solid #ffe6c34a;background:#fff5e516;font-size:10px;font-weight:850;letter-spacing:.06em;padding:0 10px}
+.mode.active{background:#f1bd79;color:#35271c;border-color:#f1bd79}
+.minor{font-size:17px;padding:0 10px}
+.primary{background:#edc58b;color:#302014;border:0;min-width:82px}
+.loading{position:absolute;inset:0;z-index:9;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;background:radial-gradient(ellipse at center,#4a3628,#1b1511);text-align:center;padding:24px;color:#ffecce}
+.loading.hidden{display:none}
+.loading-orb{width:46px;height:46px;border:5px solid #b9875077;border-top-color:#ffe1a7;border-radius:50%;animation:spin 1.3s linear infinite}
+.loading strong{font-size:13px;letter-spacing:.14em}.loading span{color:#caab83;font-size:12px}
+@keyframes spin{to{transform:rotate(360deg)}}
+@media(max-width:700px){.topbar{padding-left:13px;padding-right:13px;gap:8px}.brand{font-size:17px}.brand-icon{font-size:24px}.brand small{font-size:7px}.race-stats{gap:8px}.race-stats small{font-size:7px}.race-stats strong{font-size:16px}.progress-panel{top:calc(65px + env(safe-area-inset-top));left:10px;right:10px;padding:7px 10px}.controls{left:10px;right:10px;bottom:calc(8px + env(safe-area-inset-bottom));padding:10px 12px;gap:14px}.colors{width:100%}.color-list{justify-content:space-between}.color-choice{width:23px;height:23px}.button-row{width:100%;justify-content:space-between}.mode,.minor,.primary{height:33px;padding:0 8px;font-size:9px}.minor{font-size:15px}.primary{min-width:69px}.scene-label{top:24%;left:15px;max-width:135px}.scene-label strong{font-size:12px}.scene-label span{font-size:10px}}
+@media(max-height:530px){.scene-label{display:none}.controls{padding:8px}.color-choice{width:18px;height:18px}.button-row{gap:4px}}

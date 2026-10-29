@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
+  <meta name="theme-color" content="#1c1612">
+  <title>Marble Merge 2.0 — Physics Workshop</title>
+  <meta name="description" content="Physics-based marble racing prototype with a real vortex funnel and ball-powered four-paddle wheel.">
+  <link rel="stylesheet" href="./style.css">
+  <script type="importmap">
+    {
+      "imports": {
+        "three": "https://cdn.jsdelivr.net/npm/three@0.180.0/build/three.module.js",
+        "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.180.0/examples/jsm/",
+        "rapier": "https://esm.sh/@dimforge/rapier3d-compat@0.19.3"
+      }
+    }
+  </script>
+</head>
+<body>
+  <main id="app">
+    <div id="world" role="img" aria-label="3D wooden marble workshop with a real vortex funnel and a four-paddle wheel"></div>
+    <div class="shade" aria-hidden="true"></div>
+    <header class="topbar">
+      <div class="brand"><span class="brand-icon">◉</span><span>MARBLE <b>MERGE</b><small>PHYSICS WORKSHOP · V2</small></span></div>
+      <div class="race-stats"><span><small>RACE TIME</small><strong id="clock">00:00</strong></span><span><small>RACING</small><strong id="alive">32</strong></span><span><small>MERGES</small><strong id="merges">0</strong></span></div>
+    </header>
+    <div class="progress-panel">
+      <div class="progress-header"><span>LIVE POSITIONS</span><span id="leader">LEADER · 0%</span></div>
+      <div id="progress" class="progress-line"><div class="progress-rail"></div><div id="progress-balls"></div></div>
+      <div class="progress-ticks"><span>START</span><span>FUNNEL</span><span>PADDLE WHEEL</span><span>FINISH</span></div>
+    </div>
+    <aside class="scene-label"><strong id="scene-title">THE WOODEN RACE HALL</strong><span id="scene-subtitle">Authentic rigid-body collisions. No scripted spiral.</span></aside>
+    <div id="toast" class="toast" aria-live="polite"></div>
+    <footer class="controls">
+      <div class="colors"><span>FOLLOW MARBLE</span><div id="color-list" class="color-list"></div></div>
+      <div class="button-row">
+        <button id="follow" class="mode active">FOLLOW</button>
+        <button id="wide" class="mode">WIDE</button>
+        <button id="inside" class="mode">INSIDE</button>
+        <button id="speed" class="minor">1×</button>
+        <button id="reset" class="minor" title="Restart race">↻</button>
+        <button id="pause" class="primary">Ⅱ PAUSE</button>
+      </div>
+    </footer>
+    <div class="loading" id="loading"><div class="loading-orb"></div><strong>BUILDING PHYSICS WORKSHOP</strong><span id="loading-text">Starting the rigid-body simulation…</span></div>
+  </main>
+  <script type="module" src="./main.js"></script>
+</body>
+</html>
