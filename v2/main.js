@@ -20,6 +20,22 @@ const START_COUNT = 32;
 const START_RADIUS = .30;
 const FUNNEL = {x:-2,z:-8,r:9.7,inner:.86,top:9.5,depth:9.2};
 const room = {x:44,z:44,ground:-22};
+const UPPER_POINTS = [
+  [-37,72,-37],[-15,69,-37],[8,66,-36],[24,63,-32],
+  [35,60,-22],[38,56,-3],[37,51,14],[32,47,29],
+  [19,43,37],[-6,38,38],[-23,34,36],[-35,29,28],
+  [-38,25,12],[-36,20,-5],[-29,16,-15],[-21,13,-18],
+  [-16,11.2,-14],[-11.7,9.58,-8.1]
+];
+const LOWER_POINTS = [
+  [-3.9,-4.1,-8],[-1.7,-4.2,-8],[3,-5.4,-8],
+  [9,-7,-8],[17,-9.1,-8],[23,-12.8,-8],
+  [29,-16,-8],[34,-18.5,-8]
+];
+const UPPER_SAMPLES=720;
+const upperCurve=new THREE.CatmullRomCurve3(UPPER_POINTS.map(p=>new THREE.Vector3(...p)),false,'catmullrom',.2);
+const upperLength=upperCurve.getLength();
+const upperPositions=Array.from({length:UPPER_SAMPLES+1},(_,i)=>upperCurve.getPointAt(i/UPPER_SAMPLES));
 const clock = new THREE.Clock();
 let simTime=0, raceSpeed=1, paused=false, merges=0, finished=0;
 let accumulator=0, followId=0, viewMode='follow', toastUntil=0;
@@ -112,51 +128,56 @@ function glowPanel(x,y,z,sx,sy,color=0xffd8a0){
 function buildRoom(){
   box(90,1,90,0,room.ground-.5,0,new THREE.MeshStandardMaterial({map:makeWoodTexture(25,'#94683f','#4c3021'),roughness:.8}),false);
   const wallMaterial=cream;
-  box(90,61,1,0,7,-44,wallMaterial,false);
-  box(90,61,1,0,7,44,wallMaterial,false);
-  box(1,61,90,-44,7,0,wallMaterial,false);
-  box(1,61,90,44,7,0,wallMaterial,false);
-  box(90,1,90,0,37,0,new THREE.MeshStandardMaterial({color:0xb9a184,roughness:.94}),false);
+  box(90,124,1,0,39,-44,wallMaterial,false);
+  box(90,124,1,0,39,44,wallMaterial,false);
+  box(1,124,90,-44,39,0,wallMaterial,false);
+  box(1,124,90,44,39,0,wallMaterial,false);
+  box(90,1,90,0,101,0,new THREE.MeshStandardMaterial({color:0xb9a184,roughness:.94}),false);
   for(let x=-39;x<=40;x+=9){
     for(const z of [-43.45,43.45]){
-      box(.36,45,.38,x,2,z,decorative,false);
-      box(1.1,1,1.1,x,23,z,decorative,false);
+      box(.36,120,.38,x,39,z,decorative,false);
+      box(1.1,1,1.1,x,96,z,decorative,false);
       box(1.1,1,1.1,x,-19,z,decorative,false);
     }
   }
   for(let z=-39;z<=40;z+=9){
     for(const x of [-43.45,43.45]){
-      box(.36,45,.38,x,2,z,decorative,false);
-      box(1.1,1,1.1,x,23,z,decorative,false);
+      box(.36,120,.38,x,39,z,decorative,false);
+      box(1.1,1,1.1,x,96,z,decorative,false);
     }
   }
   for(const z of [-43.42,43.42]){
-    for(let x=-36;x<40;x+=18){
-      const pane=glowPanel(x,12,z+(z<0?.24:-.24),5.4,10,0xffe4c0);
+    for(let x=-36;x<40;x+=18)for(const h of [12,44,76]){
+      const pane=glowPanel(x,h,z+(z<0?.24:-.24),5.4,10,0xffe4c0);
       if(z>0)pane.rotation.y=Math.PI;
-      for(let dy of [-5,5])box(6.0,.24,.2,x,12+dy,z+(z<0?.3:-.3),decorative,false);
-      box(.22,10.3,.2,x,12,z+(z<0?.3:-.3),decorative,false);
+      for(let dy of [-5,5])box(6.0,.24,.2,x,h+dy,z+(z<0?.3:-.3),decorative,false);
+      box(.22,10.3,.2,x,h,z+(z<0?.3:-.3),decorative,false);
     }
+  }
+  // Tall continuous oak trim establishes three distinct gallery levels.
+  for(const elevation of [-19,23,59,96]){
+    for(const z of [-43.2,43.2])box(89,.44,.62,0,elevation,z,decorative,false);
+    for(const x of [-43.2,43.2])box(.62,.44,89,x,elevation,0,decorative,false);
   }
   const wallCollision=world.createRigidBody(RAPIER.RigidBodyDesc.fixed());
   world.createCollider(RAPIER.ColliderDesc.cuboid(46,.5,46).setTranslation(0,room.ground-.5,0),wallCollision);
   for(const [x,z,w,d] of [[0,-44,45,.5],[0,44,45,.5],[-44,0,.5,45],[44,0,.5,45]]){
-    world.createCollider(RAPIER.ColliderDesc.cuboid(w,32,d).setTranslation(x,7,z),wallCollision);
+    world.createCollider(RAPIER.ColliderDesc.cuboid(w,62,d).setTranslation(x,39,z),wallCollision);
   }
   scene.background=new THREE.Color(0x796958);
   scene.fog=new THREE.FogExp2(0xb4a18c,.006);
   scene.add(new THREE.AmbientLight(0xf8e5cc,.9));
   scene.add(new THREE.HemisphereLight(0xfff1d4,0x564035,1.25));
-  const sun=new THREE.DirectionalLight(0xfff0d5,2.2);sun.position.set(24,35,20);sun.castShadow=true;sun.shadow.mapSize.set(1024,1024);
-  sun.shadow.camera.left=-39;sun.shadow.camera.right=39;sun.shadow.camera.top=39;sun.shadow.camera.bottom=-39;sun.shadow.camera.near=.1;sun.shadow.camera.far=130;sun.shadow.bias=-.0005;scene.add(sun);
-  const warm=new THREE.PointLight(0xffcc8b,80,78,2);warm.position.set(-17,25,-8);scene.add(warm);
-  const stage=new THREE.PointLight(0xffebc7,60,55,2);stage.position.set(20,13,-4);scene.add(stage);
+  const sun=new THREE.DirectionalLight(0xfff0d5,2.2);sun.position.set(24,94,20);sun.castShadow=true;sun.shadow.mapSize.set(1024,1024);
+  sun.shadow.camera.left=-75;sun.shadow.camera.right=75;sun.shadow.camera.top=75;sun.shadow.camera.bottom=-75;sun.shadow.camera.near=.1;sun.shadow.camera.far=230;sun.shadow.bias=-.0005;scene.add(sun);
+  const warm=new THREE.PointLight(0xffcc8b,80,78,2);warm.position.set(-18,67,-12);scene.add(warm);
+  const stage=new THREE.PointLight(0xffebc7,60,55,2);stage.position.set(20,33,-4);scene.add(stage);
   // Brass-framed ceiling lamps and crown molding establish an actual room.
   for(const p of [[-19,-18],[13,-17],[21,19]]){
-    lineCylinder(new THREE.Vector3(p[0],36,p[1]),new THREE.Vector3(p[0],31,p[1]),.095,darkIron);
-    const fixture=cylinder(1.15,.35,p[0],30.7,p[1],brass,24);
+    lineCylinder(new THREE.Vector3(p[0],100,p[1]),new THREE.Vector3(p[0],94,p[1]),.095,darkIron);
+    const fixture=cylinder(1.15,.35,p[0],93.7,p[1],brass,24);
     fixture.material=brass;
-    mesh(new THREE.SphereGeometry(.49,16,12),new THREE.MeshStandardMaterial({color:0xffd9a0,emissive:0xffbd6b,emissiveIntensity:.75}),new THREE.Vector3(p[0],30.2,p[1]),false);
+    mesh(new THREE.SphereGeometry(.49,16,12),new THREE.MeshStandardMaterial({color:0xffd9a0,emissive:0xffbd6b,emissiveIntensity:.75}),new THREE.Vector3(p[0],93.2,p[1]),false);
   }
 }
 function collisionFromGeometry(geometry,parent=null,friction=.5){
@@ -192,19 +213,27 @@ function troughGeometry(curve,width=1.35,samples=100,slices=14){
 }
 function addTrough(points,width,seed){
   const curve=makeSpline(points);
-  const data=troughGeometry(curve,width);
+  const data=troughGeometry(curve,width,Math.ceil(curve.getLength()*2.5));
   mesh(data.geometry,basicWood(seed));
   collisionFromGeometry(data.geometry,null,.48);
   for(const edge of [data.edgeA,data.edgeB]){
     const curve=new THREE.CatmullRomCurve3(edge,false,'centripetal');
     mesh(new THREE.TubeGeometry(curve,180,.047,6,false),brass);
   }
-  for(let i=0;i<6;i++){
-    const t=.07+i*.17,p=curve.getPoint(t),right=new THREE.Vector3(curve.getTangent(t).z,0,-curve.getTangent(t).x).normalize();
+  const bracketCount=Math.max(6,Math.ceil(curve.getLength()/22));
+  for(let i=0;i<bracketCount;i++){
+    const t=(i+.5)/bracketCount,p=curve.getPoint(t),right=new THREE.Vector3(curve.getTangent(t).z,0,-curve.getTangent(t).x).normalize();
     const underside=p.clone().add(new THREE.Vector3(0,-.22,0));
     lineCylinder(underside.clone().addScaledVector(right,-1.2),underside.clone().addScaledVector(right,1.2),.11,decorative);
     const x=underside.x+(right.x>.6?-.6:.6),z=underside.z;
-    if(underside.y>room.ground+3)lineCylinder(new THREE.Vector3(x,room.ground,z),new THREE.Vector3(x,underside.y-.25,z),.09,darkIron);
+    if(underside.y>room.ground+30){
+      const dx=44-Math.abs(underside.x),dz=44-Math.abs(underside.z);
+      const wallAnchor=dx<dz?new THREE.Vector3(Math.sign(underside.x)*43,underside.y-3,underside.z):
+        new THREE.Vector3(underside.x,underside.y-3,Math.sign(underside.z)*43);
+      lineCylinder(underside,wallAnchor,.14,darkIron);
+    } else if(underside.y>room.ground+3){
+      lineCylinder(new THREE.Vector3(x,room.ground,z),new THREE.Vector3(x,underside.y-.25,z),.09,darkIron);
+    }
   }
   return curve;
 }
@@ -262,17 +291,9 @@ function buildWheel(){
   rotor=rb;rotorMesh=group;
 }
 function buildCourse(){
-  addTrough([
-    [-16.8,22.8,-39],[-16.2,20.4,-34],[-15.6,17.5,-28],
-    [-14.7,14.4,-21.5],[-13.5,11.6,-15.7],
-    [-12.2,9.92,-10.5],[-11.7,9.58,-8.1]
-  ],1.51,111);
+  addTrough(UPPER_POINTS,1.51,111);
   buildFunnel();
-  addTrough([
-    [-3.9,-4.1,-8],[-1.7,-4.2,-8],[3,-5.4,-8],
-    [9,-7,-8],[17,-9.1,-8],[23,-12.8,-8],
-    [29,-16,-8],[34,-18.5,-8]
-  ],1.44,119);
+  addTrough(LOWER_POINTS,1.44,119);
   buildWheel();
   // Finish banner suspended above the final physical track.
   lineCylinder(new THREE.Vector3(32,-19,-10.3),new THREE.Vector3(32,-11,-10.3),.12,darkIron);
@@ -309,18 +330,16 @@ function removeMarble(m){
   marbles=marbles.filter(x=>x!==m);
 }
 function startMarbles(){
-  const track=makeSpline([
-    [-16.8,22.8,-39],[-16.2,20.4,-34],[-15.6,17.5,-28],
-    [-14.7,14.4,-21.5],[-13.5,11.6,-15.7],[-12.2,9.92,-10.5],[-11.7,9.58,-8.1]
-  ]);
+  const track=upperCurve;
   for(let i=0;i<START_COUNT;i++){
     const row=Math.floor(i/3),col=i%3;
-    const t=.012+row*.025,p=track.getPoint(t),tangent=track.getTangent(t);
+    const t=(.4+row*.87)/upperLength,p=track.getPointAt(t),tangent=track.getTangentAt(t);
     const lateral=new THREE.Vector3(tangent.z,0,-tangent.x).normalize();
-    const a=(col-1)*.48,at=p.clone().addScaledVector(lateral,a);
+    const a=(col-1)*.72,at=p.clone().addScaledVector(lateral,a);
     at.y+=.32+1.51*(1-Math.sqrt(1-Math.pow(a/1.51,2)))+.025;
     at.z-=.07*(i%2);
-    spawnMarble({color:i%8,at,velocity:new THREE.Vector3(.001,0,.001),cooldown:3.5});
+    const marble=spawnMarble({color:i%8,at,velocity:new THREE.Vector3(.001,0,.001),cooldown:3.5});
+    marble.upperIndex=Math.round(t*UPPER_SAMPLES);
   }
   selected=marbles[0];followId=selected.id;
 }
@@ -381,13 +400,25 @@ function maybeMerge(){
     }
   }
 }
+function upperFraction(m,p){
+  let center=m.upperIndex??0;
+  const start=Math.max(0,center-24),end=Math.min(UPPER_SAMPLES,center+30);
+  let best=center,distance=Infinity;
+  for(let i=start;i<=end;i++){
+    const q=upperPositions[i],dx=p.x-q.x,dy=p.y-q.y,dz=p.z-q.z;
+    const d=dx*dx+dy*dy+dz*dz;
+    if(d<distance){distance=d;best=i;}
+  }
+  m.upperIndex=best;
+  return best/UPPER_SAMPLES;
+}
 function updateProgress(m){
   if(m.finished)return;
   const p=m.rb.translation(),r=Math.hypot(p.x-FUNNEL.x,p.z-FUNNEL.z);
   if(m.stage==='approach'&&r<FUNNEL.r+.9&&p.y<10.7&&p.y>.1)m.stage='funnel';
   if(m.stage==='funnel'&&p.y<-2.3)m.stage='lower';
   let candidate;
-  if(m.stage==='approach'){candidate=.33*clamp((p.z+39)/31,0,1);}
+  if(m.stage==='approach'){candidate=.33*upperFraction(m,p);}
   else if(m.stage==='funnel'){candidate=.34+.32*clamp((FUNNEL.top-p.y)/FUNNEL.depth,0,1);}
   else{candidate=.69+.31*clamp((p.x+4)/38,0,1);}
   m.progress=Math.max(m.progress,candidate);
@@ -395,8 +426,12 @@ function updateProgress(m){
     m.finished=true;m.progress=1;finished++;
     if(m===selected)showToast('FINISH · '+palette[m.color].name.toUpperCase()+' · '+formatTime(simTime),4);
   }
-  if(p.y<room.ground-12){m.offCourseTime+=STEP;}else{m.offCourseTime=0;}
-  if(m.offCourseTime>4){m.finished=true;}
+  // Falling off is an elimination, not an error to auto-correct.
+  if(p.y<room.ground+1.15){m.offCourseTime+=STEP;}else{m.offCourseTime=0;}
+  if(m.offCourseTime>1.0){
+    m.finished=true;m.eliminated=true;
+    if(m===selected)showToast(palette[m.color].name.toUpperCase()+' OUT · FELL OFF THE TRACK',2.5);
+  }
 }
 function syncMeshes(){
   for(const m of marbles){
@@ -420,7 +455,10 @@ function updateCamera(dt){
   if(viewMode==='wide'){
     if(selected.stage==='funnel'){camDesired.set(FUNNEL.x+18,24,FUNNEL.z+19);watchTarget.set(FUNNEL.x,5,FUNNEL.z);}
     else if(selected.stage==='lower'){camDesired.set(16,12,26);watchTarget.set(15,-9,-8);}
-    else{camDesired.set(-2,25,18);watchTarget.set(-14,14,-23);}
+    else{
+      camDesired.copy(focus).add(new THREE.Vector3(12,12,17));
+      watchTarget.lerp(focus,1-Math.exp(-dt*4));
+    }
   } else if(viewMode==='inside'){
     const look=new THREE.Vector3(p.x+horizontal.x*10,p.y+.2,p.z+horizontal.z*10);
     camDesired.copy(focus).add(new THREE.Vector3(0,.45,0)).addScaledVector(horizontal,-.32);
@@ -455,7 +493,7 @@ function renderBoard(){
   }
   const stage=selected?.stage;
   $('scene-title').textContent=stage==='funnel'?'GRAVITY VORTEX':stage==='lower'?'THE PADDLE RUN':'THE WOODEN RACE HALL';
-  $('scene-subtitle').textContent=stage==='funnel'?'Natural entry momentum · real funnel collisions':stage==='lower'?'Four paddles turn only when marbles hit':'Steeper oak trough · rolling rigid bodies';
+  $('scene-subtitle').textContent=stage==='funnel'?'Natural entry momentum · real funnel collisions':stage==='lower'?'Four paddles turn only when marbles hit':'Wall circuit · open rails · gravity-powered racing';
   if(simTime>toastUntil)$('toast').classList.remove('visible');
 }
 let boardTimer=0;
@@ -539,11 +577,115 @@ async function runPhysicsSelfTest(){
   loading.classList.toggle('error',!valid);
 }
 
+
+async function runCourseSelfTest(){
+  // Exact rigid-body trough and funnel geometries from the playable build;
+  // no renderer and no scripted motion. Marbles may be eliminated by falling.
+  const w=new RAPIER.World({x:0,y:-17,z:0});w.timestep=STEP;
+  const fixed=w.createRigidBody(RAPIER.RigidBodyDesc.fixed());
+  const addGeometry=(g,friction)=>{
+    const vertices=new Float32Array(g.getAttribute('position').array);
+    const indices=new Uint32Array(g.getIndex().array);
+    w.createCollider(RAPIER.ColliderDesc.trimesh(vertices,indices).setFriction(friction).setRestitution(.06),fixed);
+  };
+  addGeometry(troughGeometry(upperCurve,1.51,Math.ceil(upperLength*2.5)).geometry,.48);
+  const lower=makeSpline(LOWER_POINTS);
+  addGeometry(troughGeometry(lower,1.44,Math.ceil(lower.getLength()*2.5)).geometry,.48);
+  const profile=[];
+  for(let i=0;i<=54;i++){
+    const r=lerp(FUNNEL.inner,FUNNEL.r,i/54);
+    profile.push(new THREE.Vector2(r,FUNNEL.top-FUNNEL.depth*(1-Math.pow(r/FUNNEL.r,1.55))));
+  }
+  const fgeom=new THREE.LatheGeometry(profile,112);
+  fgeom.translate(FUNNEL.x,0,FUNNEL.z);
+  addGeometry(fgeom,.38);
+  w.createCollider(RAPIER.ColliderDesc.cuboid(46,.5,46).setTranslation(0,room.ground-.5,0),fixed);
+  // Physical four-paddle wheel in exactly the same place as the live course.
+  const center={x:17,y:-6.6,z:-8};
+  const anchor=w.createRigidBody(RAPIER.RigidBodyDesc.fixed().setTranslation(center.x,center.y,center.z));
+  const rotorBody=w.createRigidBody(RAPIER.RigidBodyDesc.dynamic()
+    .setTranslation(center.x,center.y,center.z).setLinearDamping(.8).setAngularDamping(.45));
+  w.createImpulseJoint(RAPIER.JointData.revolute(
+    {x:0,y:0,z:0},{x:0,y:0,z:0},{x:0,y:0,z:1}),anchor,rotorBody,true);
+  for(let i=0;i<4;i++){
+    const a=i*Math.PI/2;
+    w.createCollider(RAPIER.ColliderDesc.cuboid(1.05,.245,.65)
+      .setTranslation(Math.cos(a)*1.12,Math.sin(a)*1.12,0)
+      .setRotation({x:0,y:0,z:Math.sin(a/2),w:Math.cos(a/2)})
+      .setDensity(.22).setFriction(.58).setRestitution(.11),rotorBody);
+  }
+  const cohort=[];
+  for(let i=0;i<START_COUNT;i++){
+    const row=Math.floor(i/3),col=i%3;
+    const t=(.4+row*.87)/upperLength,p=upperCurve.getPointAt(t);
+    const tangent=upperCurve.getTangentAt(t);
+    const lateral=new THREE.Vector3(tangent.z,0,-tangent.x).normalize();
+    const lane=(col-1)*.72;
+    p.addScaledVector(lateral,lane);
+    p.y+=.345+1.51*(1-Math.sqrt(1-(lane/1.51)**2));
+    const rb=w.createRigidBody(RAPIER.RigidBodyDesc.dynamic()
+      .setTranslation(p.x,p.y,p.z).setLinearDamping(.013)
+      .setAngularDamping(.09).setCcdEnabled(true));
+    w.createCollider(RAPIER.ColliderDesc.ball(START_RADIUS)
+      .setDensity(5.5).setFriction(.62).setRestitution(.15),rb);
+    cohort.push({id:i,rb,stage:'approach',funnel:false,drained:false,paddle:false,
+      ended:false,finish:false,fallen:false,time:0});
+  }
+  let steps=0,contacts=0;
+  const stopped=()=>cohort.every(m=>m.ended);
+  const runMax=160;
+  while(steps<runMax/STEP&&!stopped()){
+    const batch=Math.min(360,Math.floor(runMax/STEP)-steps);
+    for(let i=0;i<batch;i++){
+      w.step();steps++;
+      const elapsed=steps*STEP;
+      for(const m of cohort){
+        if(m.ended)continue;
+        const p=m.rb.translation();
+        const radial=Math.hypot(p.x-FUNNEL.x,p.z-FUNNEL.z);
+        if(m.stage==='approach'&&rad<FUNNEL.r+.8&&p.y<10.7&&p.y>.1){
+          m.stage='funnel';m.funnel=true;
+        }
+        if(m.stage==='funnel'&&p.y< -2.3){
+          m.stage='lower';m.drained=true;
+        }
+        if(m.stage==='lower'&&p.x>16&&p.y< -5){m.paddle=true;}
+        if(m.stage==='lower'&&p.x>32.5&&p.y< -9){
+          m.ended=true;m.finish=true;m.time=elapsed;
+        }
+        if(p.y<room.ground+1.15){
+          m.offTime=(m.offTime||0)+STEP;
+          if(m.offTime>1){m.ended=true;m.fallen=true;m.time=elapsed;}
+        }else m.offTime=0;
+      }
+    }
+    if(steps%1440===0){
+      setLoading('FULL-COURSE TEST · '+Math.round(steps*STEP)+' s simulated · '+
+        cohort.filter(m=>m.funnel).length+' funnel entries · '+
+        cohort.filter(m=>m.finish).length+' finishes');
+    }
+    // Yield to keep the browser responsive while running real simulation time.
+    await new Promise(resolve=>setTimeout(resolve,0));
+  }
+  const result={simulatedSeconds:+(steps*STEP).toFixed(1),
+    start:START_COUNT,enteredFunnel:cohort.filter(m=>m.funnel).length,
+    drained:cohort.filter(m=>m.drained).length,
+    passedPaddles:cohort.filter(m=>m.paddle).length,
+    finishers:cohort.filter(m=>m.finish).length,
+    falls:cohort.filter(m=>m.fallen).length,
+    stillRacing:cohort.filter(m=>!m.ended).length,
+    firstFinish:+Math.min(...cohort.filter(m=>m.finish).map(m=>m.time)).toFixed(1)};
+  const success=result.finishers>0;
+  setLoading((success?'FULL-COURSE PHYSICS TEST PASS · ':'FULL-COURSE PHYSICS TEST REQUIRES TUNING · ')+JSON.stringify(result));
+  loading.classList.toggle('error',!success);
+}
+
 async function boot(){
   try{
     setLoading('Loading WebAssembly rigid-body engine…');
     await RAPIER.init();
     if(new URLSearchParams(location.search).has('physics-test')){await runPhysicsSelfTest();return;}
+    if(new URLSearchParams(location.search).has('race-test')){await runCourseSelfTest();return;}
     world=new RAPIER.World({x:0,y:-17,z:0});
     world.timestep=STEP;
     scene=new THREE.Scene();
