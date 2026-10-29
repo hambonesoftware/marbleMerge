@@ -287,7 +287,7 @@ function buildFunnel(){
   return shape;
 }
 function buildWheel(){
-  const center=new THREE.Vector3(17,-6.6,-8);
+  const center=new THREE.Vector3(17,-6.6,-7.45);
   const staticBody=world.createRigidBody(RAPIER.RigidBodyDesc.fixed().setTranslation(center.x,center.y,center.z));
   const rb=world.createRigidBody(RAPIER.RigidBodyDesc.dynamic().setTranslation(center.x,center.y,center.z).setLinearDamping(.8).setAngularDamping(.14));
   const joint=RAPIER.JointData.revolute({x:0,y:0,z:0},{x:0,y:0,z:0},{x:0,y:0,z:1});
@@ -680,7 +680,7 @@ async function runCourseSelfTest(){
   addGeometry(fgeom,.38);
   w.createCollider(RAPIER.ColliderDesc.cuboid(46,.5,46).setTranslation(0,room.ground-.5,0),fixed);
   // Physical four-paddle wheel in exactly the same place as the live course.
-  const center={x:17,y:-6.6,z:-8};
+  const center={x:17,y:-6.6,z:-7.45};
   const anchor=w.createRigidBody(RAPIER.RigidBodyDesc.fixed().setTranslation(center.x,center.y,center.z));
   const rotorBody=w.createRigidBody(RAPIER.RigidBodyDesc.dynamic()
     .setTranslation(center.x,center.y,center.z).setLinearDamping(.8).setAngularDamping(.14));
@@ -757,7 +757,11 @@ async function runCourseSelfTest(){
     // Yield to keep the browser responsive while running real simulation time.
     await new Promise(resolve=>setTimeout(resolve,0));
   }
+  const rotorQ=rotorBody.rotation(),rotorV=rotorBody.angvel();
   const result={simulatedSeconds:+(steps*STEP).toFixed(1),
+    rotorAngle:+(2*Math.atan2(rotorQ.z,rotorQ.w)).toFixed(2),
+    rotorAngularSpeed:+rotorV.z.toFixed(2),
+    wheelWaiters:cohort.filter(m=>!m.ended&&m.stage==='lower'&&m.rb.translation().x>12&&m.rb.translation().x<16).length,
     start:START_COUNT,enteredFunnel:cohort.filter(m=>m.funnel).length,
     drained:cohort.filter(m=>m.drained).length,
     passedPaddles:cohort.filter(m=>m.paddle).length,
