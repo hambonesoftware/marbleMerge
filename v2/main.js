@@ -481,10 +481,40 @@ function tick(){
   renderer.render(scene,camera);
   requestAnimationFrame(tick);
 }
+
+async function runPhysicsSelfTest(){
+  // Runs without a GPU. Open /v2/?physics-test=1 to verify the WASM physics
+  // API, trimesh colliders, hinged axle and contact-driven rotation.
+  const w=new RAPIER.World({x:0,y:-9.81,z:0});
+  w.timestep=1/120;
+  const anchor=w.createRigidBody(RAPIER.RigidBodyDesc.fixed());
+  const rotating=w.createRigidBody(RAPIER.RigidBodyDesc.dynamic().setLinearDamping(.8).setAngularDamping(.5));
+  const joint=RAPIER.JointData.revolute({x:0,y:0,z:0},{x:0,y:0,z:0},{x:0,y:0,z:1});
+  w.createImpulseJoint(joint,anchor,rotating,true);
+  w.createCollider(RAPIER.ColliderDesc.cuboid(1.05,.245,.65)
+    .setTranslation(1.12,0,0).setRotation({x:0,y:0,z:0,w:1})
+    .setDensity(.22).setFriction(.6).setRestitution(.1),rotating);
+  const floor=w.createRigidBody(RAPIER.RigidBodyDesc.fixed());
+  w.createCollider(RAPIER.ColliderDesc.trimesh(
+    new Float32Array([-4,-3,-4,4,-3,-4,4,-3,4,-4,-3,4]),
+    new Uint32Array([0,2,1,0,3,2])).setFriction(.45),floor);
+  const b=w.createRigidBody(RAPIER.RigidBodyDesc.dynamic()
+    .setTranslation(1.25,2.6,0).setCcdEnabled(true));
+  w.createCollider(RAPIER.ColliderDesc.ball(.30).setDensity(5.5).setRestitution(.2),b);
+  b.setLinvel({x:0,y:-6,z:0},true);
+  for(let i=0;i<240;i++)w.step();
+  const q=rotating.rotation(),p=b.translation(),angular=rotating.angvel();
+  const valid=[q.x,q.y,q.z,q.w,p.x,p.y,p.z,angular.z].every(Number.isFinite);
+  const result={valid,rotationRadians:2*Math.atan2(q.z,q.w),angularVelocity:angular.z,ballHeight:p.y};
+  setLoading((valid?'PHYSICS SELF-TEST PASS · ':'PHYSICS SELF-TEST FAILED · ')+JSON.stringify(result));
+  loading.classList.toggle('error',!valid);
+}
+
 async function boot(){
   try{
     setLoading('Loading WebAssembly rigid-body engine…');
     await RAPIER.init();
+    if(new URLSearchParams(location.search).has('physics-test')){await runPhysicsSelfTest();return;}
     world=new RAPIER.World({x:0,y:-17,z:0});
     world.timestep=STEP;
     scene=new THREE.Scene();
