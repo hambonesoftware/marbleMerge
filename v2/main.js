@@ -712,13 +712,17 @@ async function runCourseSelfTest(){
     cohort.push({id:i,rb,stage:'approach',funnel:false,drained:false,paddle:false,
       ended:false,finish:false,fallen:false,time:0});
   }
-  let steps=0,contacts=0;
+  let steps=0,contacts=0,wheelAngularTravel=0,wheelPeakSpeed=0,previousWheelAngle=0;
   const stopped=()=>cohort.every(m=>m.ended);
   const runMax=120;
   while(steps<runMax/STEP&&!stopped()){
     const batch=Math.min(360,Math.floor(runMax/STEP)-steps);
     for(let i=0;i<batch;i++){
       w.step();steps++;
+      const wheelQ=rotorBody.rotation(),wheelOmega=rotorBody.angvel().z;
+      const wheelAngle=2*Math.atan2(wheelQ.z,wheelQ.w);
+      wheelAngularTravel+=Math.atan2(Math.sin(wheelAngle-previousWheelAngle),Math.cos(wheelAngle-previousWheelAngle));
+      previousWheelAngle=wheelAngle;wheelPeakSpeed=Math.max(wheelPeakSpeed,Math.abs(wheelOmega));
       const elapsed=steps*STEP;
       for(const m of cohort){
         if(m.ended)continue;
@@ -761,6 +765,8 @@ async function runCourseSelfTest(){
   const result={simulatedSeconds:+(steps*STEP).toFixed(1),
     rotorAngle:+(2*Math.atan2(rotorQ.z,rotorQ.w)).toFixed(2),
     rotorAngularSpeed:+rotorV.z.toFixed(2),
+    wheelRevolutions:+(Math.abs(wheelAngularTravel)/(2*Math.PI)).toFixed(2),
+    wheelPeakSpeed:+wheelPeakSpeed.toFixed(2),
     wheelWaiters:cohort.filter(m=>!m.ended&&m.stage==='lower'&&m.rb.translation().x>12&&m.rb.translation().x<16).length,
     start:START_COUNT,enteredFunnel:cohort.filter(m=>m.funnel).length,
     drained:cohort.filter(m=>m.drained).length,
