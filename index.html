@@ -7,7 +7,7 @@
   <meta name="application-name" content="Marble Merge Grand Prix" />
   <meta name="description" content="Marble Merge Grand Prix — a cinematic 3D physics-inspired marble race." />
   <title>Marble Merge Grand Prix</title>
-  <link rel="stylesheet" href="./styles.css" />
+  <link rel="stylesheet" href="./styles.css?v=kinetic2" />
   <script type="importmap">
     {
       "imports": {
@@ -71,6 +71,7 @@
           <button class="camera-btn active" data-camera="chase">FOLLOW</button>
           <button class="camera-btn" data-camera="onboard">INSIDE BALL</button>
           <button class="camera-btn" data-camera="aerial">AERIAL</button>
+          <button class="camera-btn" data-camera="tour" title="Tap repeatedly to visit each obstacle">TRACK TOUR</button>
         </div>
       </div>
       <div class="transport">
@@ -79,9 +80,9 @@
         <button id="play-btn" class="play-btn">Ⅱ <span>PAUSE</span></button>
       </div>
     </footer>
-    <div class="bottom-note">INVERTED BELLS <span>•</span> WHEELS & SPINNERS <span>•</span> FORKS & DROP CHUTES</div>
+    <div class="bottom-note">VORTEX FUNNELS <span>•</span> BALL-POWERED PADDLES <span>•</span> SEESAWS & PENDULUMS</div>
     <div class="loading" id="loading"><div class="loader-orb"></div><strong>BUILDING THE CIRCUIT</strong><span>Preparing your marbles…</span></div>
   </main>
-  <script type="module" src="./src/game.js"></script>
+  <script type="module" src="./src/game.js?v=kinetic2"></script>
 </body>
 </html>

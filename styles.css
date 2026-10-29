@@ -58,3 +58,6 @@ h1{font-family:'Barlow Condensed',Impact,sans-serif;font-weight:900;font-size:cl
 @media(max-width:640px){.race-progress{top:67px;left:9px;right:9px;border-radius:9px;padding:7px 8px 6px}.progress-heading{font-size:8px;letter-spacing:.03em;gap:5px}.progress-title{gap:5px}.progress-leader{font-size:8px}.progress-current{font-size:8px}.progress-line{height:55px;margin:3px 8px 0}.progress-marble{width:11px;height:11px;border-width:1px;font-size:6px}.progress-marble.selected{outline-width:1px;outline-offset:1px}.progress-scale{font-size:7px;letter-spacing:0;margin:0 1px}.race-callout{top:33%;max-width:185px}}
 @media(max-width:375px){.progress-heading{font-size:7px}.progress-current{max-width:130px;overflow:hidden;text-overflow:ellipsis}.race-progress{top:58px}}
 @media(max-height:570px){.race-progress{top:59px;padding-top:5px;padding-bottom:3px}.progress-line{height:43px}.progress-scale{font-size:7px}.race-callout{display:none}}
+
+.camera-btn[data-camera="tour"]{border-color:rgba(244,192,111,.5);color:#ffe4a4}
+.camera-btn[data-camera="tour"].active{background:#f0bc75;border-color:#f0bc75;color:#382315}

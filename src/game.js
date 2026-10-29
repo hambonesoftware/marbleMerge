@@ -10,6 +10,10 @@ const MARBLE_COUNT = 32;
 const TRACK_WIDTH = 5.8;
 const TRACK_SAMPLES = 1250;
 const MAX_RACE_SECONDS = 155;
+const FUNNEL_RADIUS = 10.5;
+const FUNNEL_DRAIN_RADIUS = 0.82;
+const FUNNEL_DEPTH = 10.3;
+const FUNNEL_HALF_SPAN = 14.5;
 const TWO_PI = Math.PI * 2;
 const TROUGH_HALF_ANGLE = Math.PI / 4;
 const TROUGH_SEGMENTS = 18;
@@ -98,21 +102,25 @@ for (let i = 1; i < roomCourseXZ.length; i++) {
 const totalPlanDistance = courseDistances.at(-1);
 const curve = new THREE.CatmullRomCurve3(roomCourseXZ.map(([x, z], i) => {
   const percent = courseDistances[i] / totalPlanDistance;
-  return new THREE.Vector3(x, 125 - percent * 93, z);
+  return new THREE.Vector3(x, 240 - percent * 208, z);
 }), false, 'centripetal');
 const trackLength = curve.getLength();
-const FEATURE_BELLS = [0.15, 0.60].map((fraction, id) => ({ id, s: trackLength * fraction, spread: 15 }));
+const FEATURE_BELLS = [0.15, 0.60].map((fraction, id) => ({ id, fraction, s: trackLength * fraction, spread: FUNNEL_HALF_SPAN }));
 const FEATURE_DROPS = [0.22, 0.51, 0.81].map((fraction, id) => ({ id, fraction, s: trackLength * fraction }));
-const FEATURE_WHEELS = [0.29, 0.76].map((fraction, id) => ({ id, s: trackLength * fraction, speed: id ? -1.28 : 1.55 }));
-const FEATURE_SPINNERS = [0.45, 0.91].map((fraction, id) => ({ id, s: trackLength * fraction, speed: id ? -2.2 : 1.85 }));
-const FEATURE_SPLITS = [[0.355, 0.412], [0.675, 0.725]].map(([start, end], id) => ({
+const FEATURE_WHEELS = [0.29, 0.76].map((fraction, id) => ({ id, s: trackLength * fraction }));
+const FEATURE_SPINNERS = [0.45, 0.91].map((fraction, id) => ({ id, s: trackLength * fraction }));
+const FEATURE_TILTERS = [0.195, 0.845].map((fraction, id) => ({ id, s: trackLength * fraction }));
+const FEATURE_PENDULUMS = [0.385, 0.675].map((fraction, id) => ({ id, s: trackLength * fraction }));
+const FEATURE_SPLITS = [[0.355, 0.412], [0.685, 0.735]].map(([start, end], id) => ({
   id, start: trackLength * start, end: trackLength * end
 }));
 const FEATURE_MILESTONES = [
-  ...FEATURE_BELLS.map(item => ({ s: item.s, name: 'INVERTED BELL', color: '#eac779' })),
+  ...FEATURE_BELLS.map(item => ({ s: item.s, name: 'VORTEX FUNNEL', color: '#eac779' })),
   ...FEATURE_DROPS.map(item => ({ s: item.s, name: 'STEEP DROP', color: '#ff9a6a' })),
-  ...FEATURE_WHEELS.map(item => ({ s: item.s, name: 'ROLLING WHEEL', color: '#edc47b' })),
-  ...FEATURE_SPINNERS.map(item => ({ s: item.s, name: 'PADDLE SPINNER', color: '#f67c61' })),
+  ...FEATURE_WHEELS.map(item => ({ s: item.s, name: 'BALL-POWERED WHEEL', color: '#edc47b' })),
+  ...FEATURE_SPINNERS.map(item => ({ s: item.s, name: 'CONTACT SPINNER', color: '#f67c61' })),
+  ...FEATURE_TILTERS.map(item => ({ s: item.s, name: 'SEESAW BRIDGE', color: '#9ff2aa' })),
+  ...FEATURE_PENDULUMS.map(item => ({ s: item.s, name: 'PENDULUM GATE', color: '#dda8ff' })),
   ...FEATURE_SPLITS.map(item => ({ s: item.start, name: 'SPLIT PATHS', color: '#77dfe7' }))
 ].sort((a, b) => a.s - b.s);
 for (const feature of FEATURE_MILESTONES) {
@@ -128,8 +136,10 @@ const smoothstep = value => {
   return n * n * (3 - 2 * n);
 };
 function dropProfile(u) {
-  return FEATURE_DROPS.reduce((height, drop) =>
+  const cascades = FEATURE_DROPS.reduce((height, drop) =>
     height + 8 * smoothstep((u - drop.fraction + 0.011) / 0.022), 0);
+  return FEATURE_BELLS.reduce((height, bell) =>
+    height + FUNNEL_DEPTH * smoothstep((u - bell.fraction + 0.011) / 0.022), cascades);
 }
 function trackPointAt(u) {
   const p = curve.getPointAt(THREE.MathUtils.clamp(u, 0, 1));
@@ -271,7 +281,7 @@ for (let i = 0; i <= TRACK_SAMPLES; i++) {
     bottomPositions.push(point.x, point.y + rise - 0.38, point.z);
     surfaceUvs.push(j / TROUGH_SEGMENTS, i / TRACK_SAMPLES * trackLength / 24);
   }
-  if (i < TRACK_SAMPLES) {
+  if (i < TRACK_SAMPLES && !FEATURE_BELLS.some(bell => Math.abs(s - bell.s) < FUNNEL_HALF_SPAN - 1)) {
     for (let j = 0; j < TROUGH_SEGMENTS; j++) {
       const k = i * rowSize + j;
       indices.push(k, k + rowSize, k + 1, k + 1, k + rowSize, k + rowSize + 1);
@@ -297,16 +307,26 @@ const surface = new THREE.Mesh(stripGeometry(topPositions), new THREE.MeshPhysic
 trackGroup.add(surface);
 
 function pathTube(offset, height, radius, material, followOuterLip = false) {
-  const points = [];
-  for (let i = 0; i <= TRACK_SAMPLES; i += 3) {
+  const group = new THREE.Group();
+  let points = [];
+  const flushSegment = () => {
+    if (points.length >= 3) {
+      const path = new THREE.CatmullRomCurve3(points);
+      group.add(new THREE.Mesh(new THREE.TubeGeometry(path, Math.min(1200, points.length * 3), radius, 5, false), material));
+    }
+    points = [];
+  };
+  for (let i = 0; i <= TRACK_SAMPLES; i += 2) {
     const s = i / TRACK_SAMPLES * trackLength;
+    if (FEATURE_BELLS.some(bell => Math.abs(s - bell.s) < FUNNEL_HALF_SPAN - 1)) {
+      flushSegment();
+      continue;
+    }
     const lateral = followOuterLip ? Math.sign(offset) * (troughProfile(s).width / 2 + 0.04) : offset;
     points.push(worldAt(s, lateral, height));
   }
-  const lastOffset = followOuterLip ? Math.sign(offset) * (troughProfile(trackLength).width / 2 + 0.04) : offset;
-  points.push(worldAt(trackLength, lastOffset, height));
-  const path = new THREE.CatmullRomCurve3(points);
-  return new THREE.Mesh(new THREE.TubeGeometry(path, Math.min(1500, Math.ceil(trackLength * 1.3)), radius, 5, false), material);
+  flushSegment();
+  return group;
 }
 const railMaterial = new THREE.MeshPhysicalMaterial({ color: 0x6c3820, metalness: 0, roughness: 0.3, clearcoat: 0.75 });
 const railHighlight = new THREE.MeshStandardMaterial({ color: 0xdca76a, metalness: 0.15, roughness: 0.32 });
@@ -318,7 +338,7 @@ for (const side of [-1, 1]) {
 // No center groove or parallel dividing strips: this is one uninterrupted
 // quarter-circle wooden chute, not multiple marble lanes.
 const supportMaterial = new THREE.MeshStandardMaterial({ color: 0x41362e, metalness: 0.12, roughness: 0.58 });
-const ROOM = { halfX: 86, halfZ: 70, floorY: -23.5, ceilingY: 180 };
+const ROOM = { halfX: 86, halfZ: 70, floorY: -23.5, ceilingY: 290 };
 const baseY = ROOM.floorY + 0.5;
 const roomGroup = new THREE.Group();
 scene.add(roomGroup);
@@ -345,7 +365,7 @@ for (const side of [-1, 1]) {
   // Wood-paneled lower walls and two raised architectural cornices.
   roomBox(ROOM.halfX * 2, 24, 0.72, 0, ROOM.floorY + 12, side * (ROOM.halfZ - 1.15), darkOak);
   roomBox(0.72, 24, ROOM.halfZ * 2, side * (ROOM.halfX - 1.15), ROOM.floorY + 12, 0, darkOak);
-  for (const y of [ROOM.floorY + 24, 53, 153]) {
+  for (const y of [ROOM.floorY + 24, 53, 153, 255]) {
     roomBox(ROOM.halfX * 2, 1.15, 1.2, 0, y, side * (ROOM.halfZ - 1.4), roomTrim);
     roomBox(1.2, 1.15, ROOM.halfZ * 2, side * (ROOM.halfX - 1.4), y, 0, roomTrim);
   }
@@ -354,7 +374,7 @@ for (const side of [-1, 1]) {
 // The tall framed windows and pilasters stay visible while the camera follows
 // the high-level wall run, establishing that this is an enclosed race hall.
 function roomWindow(offset, wallSide, isZWall) {
-  const y = 110;
+  const y = 194;
   const width = 13;
   const height = 35;
   const position = wallSide * ((isZWall ? ROOM.halfZ : ROOM.halfX) - 1.22);
@@ -461,12 +481,12 @@ function featureSign(s, text, color) {
   context.textAlign = 'center';
   context.textBaseline = 'middle';
   context.font = '900 57px Arial, sans-serif';
-  context.fillText(text, 256, 68);
+  context.fillText(text, 256, 68, 462);
   const texture = new THREE.CanvasTexture(canvas);
   texture.colorSpace = THREE.SRGBColorSpace;
   const sign = new THREE.Sprite(new THREE.SpriteMaterial({ map: texture, transparent: true, depthWrite: false }));
-  sign.position.copy(worldAt(s, 0, 6.1));
-  sign.scale.set(5.8, 1.45, 1);
+  sign.position.copy(worldAt(s, 0, 9.0));
+  sign.scale.set(12.5, 3.0, 1);
   trackGroup.add(sign);
 }
 
@@ -480,19 +500,101 @@ function crossSectionTrim(s, material, thickness) {
   trackGroup.add(new THREE.Mesh(new THREE.TubeGeometry(path, 36, thickness, 6, false), material));
 }
 
+// High-contrast gantries distinguish each device while following the race.
+function addTrackArch(s, material) {
+  const profile = troughProfile(s);
+  const left = -profile.width / 2 - 0.4;
+  const right = profile.width / 2 + 0.4;
+  const topHeight = 7.8;
+  function rod(start, end, radius) {
+    const span = end.clone().sub(start);
+    const mesh = new THREE.Mesh(new THREE.CylinderGeometry(radius, radius, span.length(), 10), material);
+    mesh.position.copy(start).addScaledVector(span, 0.5);
+    mesh.quaternion.setFromUnitVectors(UP, span.normalize());
+    trackGroup.add(mesh);
+  }
+  for (const lane of [left, right]) {
+    rod(worldAt(s, lane, 0.12), worldAt(s, lane, topHeight), 0.2);
+    const beacon = new THREE.Mesh(new THREE.SphereGeometry(0.29, 12, 8),
+      new THREE.MeshBasicMaterial({ color: 0xffe7b1 }));
+    beacon.position.copy(worldAt(s, lane, topHeight));
+    trackGroup.add(beacon);
+  }
+  rod(worldAt(s, left, topHeight), worldAt(s, right, topHeight), 0.22);
+}
+
+// Each trumpet is its own large three-dimensional surface. The ordinary
+// wooden chute has a matching opening so marbles really circle the bowl
+// instead of simply travelling through a widened section of the chute.
+const funnels = [];
+function funnelSurfaceY(radius, outerRadius) {
+  return -FUNNEL_DEPTH * (1 - Math.pow(THREE.MathUtils.clamp(radius / outerRadius, 0, 1), 1.32));
+}
+
 for (const bell of FEATURE_BELLS) {
-  crossSectionTrim(bell.s - 12, brass, 0.11);
-  crossSectionTrim(bell.s + 12, brass, 0.11);
-  const ring = new THREE.Mesh(new THREE.TorusGeometry(1.2, 0.12, 7, 48), brass);
-  ring.position.copy(worldAt(bell.s, 0, -0.35));
-  ring.rotation.x = -Math.PI / 2;
-  trackGroup.add(ring);
-  featureSign(bell.s - 18, 'INVERTED BELL', 0xe2b75e);
+  const entryS = bell.s - FUNNEL_HALF_SPAN + 0.6;
+  const exitS = bell.s + FUNNEL_HALF_SPAN - 0.6;
+  const entrance = worldAt(entryS, 0, 0.15);
+  const centerPoint = frameAt(bell.s).point;
+  const outerRadius = THREE.MathUtils.clamp(
+    Math.hypot(entrance.x - centerPoint.x, entrance.z - centerPoint.z), 10.2, 14.0
+  );
+  const center = new THREE.Vector3(centerPoint.x, entrance.y, centerPoint.z);
+  const exitPoint = worldAt(exitS, 0, 0.22);
+  const drainPoint = center.clone().addScaledVector(UP, -FUNNEL_DEPTH);
+  const exitCurve = new THREE.CatmullRomCurve3([
+    drainPoint.clone(),
+    drainPoint.clone().add(new THREE.Vector3(0, -2.5, 0)),
+    drainPoint.clone().lerp(exitPoint, 0.65).add(new THREE.Vector3(0, -2.1, 0)),
+    exitPoint.clone()
+  ]);
+  const bowlProfile = [];
+  for (let i = 0; i <= 40; i++) {
+    const r = FUNNEL_DRAIN_RADIUS + (outerRadius - FUNNEL_DRAIN_RADIUS) * i / 40;
+    bowlProfile.push(new THREE.Vector2(r, funnelSurfaceY(r, outerRadius)));
+  }
+  const bowl = new THREE.Mesh(new THREE.LatheGeometry(bowlProfile, 112),
+    new THREE.MeshPhysicalMaterial({
+      map: oakGrain, color: 0xf1d3a4, roughness: 0.31, clearcoat: 0.62,
+      clearcoatRoughness: 0.26, side: THREE.DoubleSide
+    }));
+  bowl.position.copy(center);
+  trackGroup.add(bowl);
+  const upperLip = new THREE.Mesh(new THREE.TorusGeometry(outerRadius, 0.26, 12, 112), brass);
+  upperLip.rotation.x = -Math.PI / 2;
+  upperLip.position.copy(center);
+  trackGroup.add(upperLip);
+  const innerLip = new THREE.Mesh(new THREE.TorusGeometry(FUNNEL_DRAIN_RADIUS + 0.18, 0.15, 9, 60), bronze);
+  innerLip.rotation.x = -Math.PI / 2;
+  innerLip.position.copy(drainPoint);
+  trackGroup.add(innerLip);
+  const drainTube = new THREE.Mesh(new THREE.TubeGeometry(exitCurve, 55, 0.86, 12, false),
+    new THREE.MeshPhysicalMaterial({
+      color: 0xc8934e, metalness: 0.26, roughness: 0.28,
+      transparent: true, opacity: 0.43, depthWrite: false, side: THREE.DoubleSide
+    }));
+  trackGroup.add(drainTube);
+  for (let brace = 0; brace < 8; brace++) {
+    const angle = TWO_PI * brace / 8;
+    const inner = FUNNEL_DRAIN_RADIUS + 0.35;
+    const outer = outerRadius - 0.3;
+    const base = center.clone().add(new THREE.Vector3(
+      outer * Math.cos(angle), -0.48, outer * Math.sin(angle)
+    ));
+    const tip = center.clone().add(new THREE.Vector3(
+      inner * Math.cos(angle), -FUNNEL_DEPTH - 0.4, inner * Math.sin(angle)
+    ));
+    supportBeam(base, tip, 0.16);
+  }
+  funnels.push({ bell, center, outerRadius, entryS, exitS, exitCurve, exitPoint });
+  addTrackArch(entryS - 2, brass);
+  featureSign(entryS - 6, 'VORTEX FUNNEL', 0xe2b75e);
 }
 
 for (const drop of FEATURE_DROPS) {
   crossSectionTrim(drop.s - 12, paddleMaterial, 0.13);
   crossSectionTrim(drop.s + 12, paddleMaterial, 0.13);
+  addTrackArch(drop.s - 8, brass);
   featureSign(drop.s - 15, 'STEEP DROP', 0xf28a56);
 }
 
@@ -513,8 +615,9 @@ for (const wheel of FEATURE_WHEELS) {
   axle.rotation.x = Math.PI / 2;
   rotor.add(axle);
   trackGroup.add(mount);
-  mechanismRotors.push({ type: 'wheel', feature: wheel, rotor });
-  featureSign(wheel.s - 15, 'ROLLING WHEEL', 0xe2b75e);
+  mechanismRotors.push({ type: 'wheel', feature: wheel, rotor, angle: 0, omega: 0, inertia: 8.5 });
+  addTrackArch(wheel.s - 8, brass);
+  featureSign(wheel.s - 15, 'BALL-DRIVEN WHEEL', 0xe2b75e);
 }
 
 for (const spinner of FEATURE_SPINNERS) {
@@ -533,8 +636,9 @@ for (const spinner of FEATURE_SPINNERS) {
   const cap = new THREE.Mesh(new THREE.CylinderGeometry(0.36, 0.36, 0.65, 16), brass);
   rotor.add(cap);
   trackGroup.add(mount);
-  mechanismRotors.push({ type: 'spinner', feature: spinner, rotor });
-  featureSign(spinner.s - 14, 'PADDLE SPINNER', 0xf28a56);
+  mechanismRotors.push({ type: 'spinner', feature: spinner, rotor, angle: 0, omega: 0, inertia: 6.0 });
+  addTrackArch(spinner.s - 8, brass);
+  featureSign(spinner.s - 14, 'CONTACT SPINNER', 0xf28a56);
 }
 
 for (const split of FEATURE_SPLITS) {
@@ -553,15 +657,96 @@ for (const split of FEATURE_SPLITS) {
   for (const guide of [leftGuide, rightGuide]) {
     trackGroup.add(new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(guide), 70, 0.055, 6, false), brass));
   }
+  addTrackArch(split.start - 8, brass);
   featureSign(split.start - 12, 'SPLIT PATHS', 0x86d7dc);
 }
 
-function updateMechanisms() {
-  for (const mechanism of mechanismRotors) {
-    const phase = raceTime * mechanism.feature.speed + mechanism.feature.id * 0.93;
-    if (mechanism.type === 'wheel') mechanism.rotor.rotation.z = phase;
-    else mechanism.rotor.rotation.y = phase;
+// Additional modules react to ball contact rather than looping animations.
+for (const feature of FEATURE_TILTERS) {
+  const mount = new THREE.Group();
+  mount.position.copy(worldAt(feature.s, 0, 0.30));
+  mount.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), frameAt(feature.s).tangent);
+  const rotor = new THREE.Group();
+  mount.add(rotor);
+  const plank = new THREE.Mesh(new THREE.BoxGeometry(TRACK_WIDTH - 0.5, 0.32, 7.3), paddleMaterial);
+  rotor.add(plank);
+  for (const side of [-1, 1]) {
+    const rail = new THREE.Mesh(new THREE.BoxGeometry(0.17, 0.53, 7.3), brass);
+    rail.position.set(side * (TRACK_WIDTH - 0.7) / 2, 0.25, 0);
+    rotor.add(rail);
   }
+  const axle = new THREE.Mesh(new THREE.CylinderGeometry(0.25, 0.25, TRACK_WIDTH + 0.7, 14), bronze);
+  axle.rotation.z = Math.PI / 2;
+  mount.add(axle);
+  trackGroup.add(mount);
+  mechanismRotors.push({ type: 'seesaw', feature, rotor, angle: 0, omega: 0, inertia: 5.8 });
+  addTrackArch(feature.s - 7, brass);
+  featureSign(feature.s - 14, 'SEESAW BRIDGE', 0x9be69b);
+}
+
+for (const feature of FEATURE_PENDULUMS) {
+  const mount = new THREE.Group();
+  mount.position.copy(worldAt(feature.s, 0, 5.9));
+  mount.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), frameAt(feature.s).tangent);
+  const rotor = new THREE.Group();
+  mount.add(rotor);
+  const shaft = new THREE.Mesh(new THREE.CylinderGeometry(0.23, 0.23, 4.85, 16), bronze);
+  shaft.position.y = -2.4;
+  rotor.add(shaft);
+  const weight = new THREE.Mesh(new THREE.SphereGeometry(0.94, 22, 16), brass);
+  weight.position.y = -4.78;
+  rotor.add(weight);
+  trackGroup.add(mount);
+  mechanismRotors.push({ type: 'pendulum', feature, rotor, angle: 0, omega: 0, inertia: 4.0 });
+  addTrackArch(feature.s - 6, brass);
+  featureSign(feature.s - 14, 'PENDULUM GATE', 0xdcaaff);
+}
+
+function updateMechanisms(dt) {
+  for (const mechanism of mechanismRotors) {
+    if (mechanism.type === 'seesaw') {
+      mechanism.omega -= Math.sin(mechanism.angle) * 8.5 * dt;
+    } else if (mechanism.type === 'pendulum') {
+      mechanism.omega -= Math.sin(mechanism.angle) * 4.8 * dt;
+    }
+    const friction = mechanism.type === 'wheel' || mechanism.type === 'spinner' ? 0.42 : 0.86;
+    mechanism.omega *= Math.exp(-friction * dt);
+    mechanism.angle += mechanism.omega * dt;
+    if (mechanism.type === 'seesaw') {
+      mechanism.angle = THREE.MathUtils.clamp(mechanism.angle, -0.31, 0.31);
+      if (Math.abs(mechanism.angle) >= 0.31) mechanism.omega *= -0.22;
+      mechanism.rotor.rotation.x = mechanism.angle;
+    } else if (mechanism.type === 'pendulum') {
+      mechanism.angle = THREE.MathUtils.clamp(mechanism.angle, -0.88, 0.88);
+      if (Math.abs(mechanism.angle) >= 0.88) mechanism.omega *= -0.38;
+      mechanism.rotor.rotation.z = mechanism.angle;
+    } else if (mechanism.type === 'wheel') {
+      mechanism.rotor.rotation.z = mechanism.angle;
+    } else {
+      mechanism.rotor.rotation.y = mechanism.angle;
+    }
+  }
+}
+
+function impactMechanism(r, mechanism) {
+  const feature = mechanism.feature;
+  if (Math.abs(r.s - feature.s) > r.radius + 0.65) return;
+  const key = mechanism.type + '-' + feature.id;
+  if (raceTime - (r.lastFeatureHit[key] ?? -100) < 0.38) return;
+  r.lastFeatureHit[key] = raceTime;
+  // Contact impulse is proportional to approaching linear momentum and lever
+  // arm. The mechanism receives an equal-and-opposite angular impulse.
+  const side = r.lane < -0.08 ? -1 : r.lane > 0.08 ? 1 : r.bias > Math.PI ? -1 : 1;
+  const arm = Math.max(0.56, Math.abs(r.lane));
+  const contactSpeed = Math.max(0.5, r.v - side * mechanism.omega * arm);
+  const transfer = mechanism.type === 'pendulum' ? 0.44 : mechanism.type === 'seesaw' ? 0.3 : 0.4;
+  const angularImpulse = side * (r.mass * contactSpeed * arm * transfer) /
+    (mechanism.inertia + r.mass * arm * arm);
+  mechanism.omega = THREE.MathUtils.clamp(mechanism.omega + angularImpulse, -8, 8);
+  const retained = mechanism.type === 'pendulum' ? 0.73
+    : mechanism.type === 'seesaw' ? 0.91 : 0.84;
+  r.v = Math.max(3.6, r.v * (retained + Math.min(0.09, r.mass * 0.004)));
+  r.vl += side * Math.min(3.2, Math.abs(angularImpulse) * 1.5);
 }
 
 const obstacles = [];
@@ -701,6 +886,7 @@ function createMarbleMesh(racer) {
 let racers = [];
 let selectedId = 0;
 let cameraMode = 'chase';
+let tourIndex = 0;
 let raceStatus = 'running';
 let raceTime = 0;
 let totalMerges = 0;
@@ -745,8 +931,9 @@ function createRacers() {
       id: i, identity, tier, mass: massForTier(tier), radius: radiusForTier(tier),
       s, lane, prevS: s, prevLane: lane,
       v: 7.4 + rand() * 0.9, vl: 0,
-      drag: 0.035 + rand() * 0.009,
+      drag: 0.016 + rand() * 0.003,
       bias: rand() * TWO_PI, roll: rand() * TWO_PI,
+      mode: 'track', funnelState: null,
       alive: true, finished: false, finishTime: null,
       lastObstacle: -1, lastObstacleTime: -100,
       lastFeatureHit: Object.create(null), forkSelections: Object.create(null),
@@ -834,7 +1021,7 @@ function resolveMarbleCollisions() {
     if (!a.alive) continue;
     for (let j = i + 1; j < active.length; j++) {
       const b = active[j];
-      if (!b.alive || Math.abs(a.s - b.s) > a.radius + b.radius + 0.13) continue;
+      if (!b.alive || a.mode !== 'track' || b.mode !== 'track' || Math.abs(a.s - b.s) > a.radius + b.radius + 0.13) continue;
       const fork = FEATURE_SPLITS.find(split => (a.s + b.s) / 2 > split.start + 5 && (a.s + b.s) / 2 < split.end - 5);
       if (fork && a.lane * b.lane < 0) continue;
       const dx = b.s - a.s;
@@ -869,18 +1056,126 @@ function resolveMarbleCollisions() {
   }
 }
 
+// A separate polar-coordinate solver drives each marble around the actual
+// funnel wall. Angular momentum increases its angular speed as the orbit
+// shrinks; surface slope, rolling loss and centrifugal force set radial drift.
+function funnelContactNormal(funnel, radius, theta) {
+  const slope = 1.32 * FUNNEL_DEPTH / funnel.outerRadius *
+    Math.pow(Math.max(0.05, radius / funnel.outerRadius), 0.32);
+  return new THREE.Vector3(-slope * Math.cos(theta), 1, -slope * Math.sin(theta)).normalize();
+}
+
+function funnelMarblePosition(funnel, radius, theta, ballRadius) {
+  const x = radius * Math.cos(theta);
+  const z = radius * Math.sin(theta);
+  const normal = funnelContactNormal(funnel, radius, theta);
+  return funnel.center.clone().add(new THREE.Vector3(
+    x, funnelSurfaceY(radius, funnel.outerRadius), z
+  )).addScaledVector(normal, ballRadius);
+}
+
+function racerPosition(r, alpha = 1) {
+  if (r.mode === 'funnel' && r.funnelState) {
+    const f = r.funnelState;
+    const radius = THREE.MathUtils.lerp(f.prevRadius, f.radius, alpha);
+    const theta = THREE.MathUtils.lerp(f.prevTheta, f.theta, alpha);
+    return funnelMarblePosition(f.funnel, radius, theta, r.visibleRadius || r.radius);
+  }
+  if (r.mode === 'drain' && r.funnelState) {
+    const f = r.funnelState;
+    const t = THREE.MathUtils.lerp(f.prevDrainT, f.drainT, alpha);
+    return f.funnel.exitCurve.getPointAt(THREE.MathUtils.clamp(t, 0, 1));
+  }
+  return marbleCenterAt(
+    THREE.MathUtils.lerp(r.prevS, r.s, alpha),
+    THREE.MathUtils.lerp(r.prevLane, r.lane, alpha),
+    r.visibleRadius || r.radius
+  );
+}
+
+function enterFunnel(r, funnel) {
+  const entrance = worldAt(funnel.entryS, r.lane, r.radius);
+  const theta = Math.atan2(entrance.z - funnel.center.z, entrance.x - funnel.center.x);
+  const outerRadius = funnel.outerRadius - Math.max(0.22, r.radius * 0.5);
+  r.mode = 'funnel';
+  r.s = funnel.entryS;
+  r.lane = 0;
+  r.vl = 0;
+  r.funnelState = {
+    funnel, theta, prevTheta: theta, startTheta: theta, radius: outerRadius, prevRadius: outerRadius,
+    radialVelocity: -1.0,
+    angularMomentum: outerRadius * Math.max(17, r.v * 1.08),
+    drainT: 0, prevDrainT: 0
+  };
+  if (r.id === selectedId) showToast('VORTEX FUNNEL · HOLD ON!', 1200);
+}
+
+function updateFunnelRacer(r, dt) {
+  const f = r.funnelState;
+  f.prevTheta = f.theta;
+  f.prevRadius = f.radius;
+  if (r.mode === 'drain') {
+    f.prevDrainT = f.drainT;
+    f.drainT = Math.min(1, f.drainT + dt / 0.62);
+    r.s = THREE.MathUtils.lerp(f.funnel.exitS - 1.2, f.funnel.exitS, f.drainT);
+    if (f.drainT >= 1) {
+      r.mode = 'track';
+      r.s = f.funnel.exitS;
+      r.prevS = r.s;
+      r.lane = Math.sin(f.theta) * Math.min(0.9, TRACK_WIDTH * 0.17);
+      r.prevLane = r.lane;
+      r.v = Math.max(14, Math.min(28, r.v * 0.91));
+      r.funnelState = null;
+    }
+    return;
+  }
+  const radius = Math.max(FUNNEL_DRAIN_RADIUS, f.radius);
+  const slope = 1.32 * FUNNEL_DEPTH / f.funnel.outerRadius *
+    Math.pow(radius / f.funnel.outerRadius, 0.32);
+  const tangentialSpeed = Math.min(26, f.angularMomentum / radius);
+  const centrifugal = tangentialSpeed * tangentialSpeed / Math.max(1.8, radius);
+  const gravityInward = 17.5 * slope / Math.sqrt(1 + slope * slope);
+  f.radialVelocity -= (gravityInward - Math.min(4.5, centrifugal * 0.12)) * dt;
+  f.radialVelocity = THREE.MathUtils.clamp(f.radialVelocity, -2.8, -0.8);
+  f.radius = Math.max(FUNNEL_DRAIN_RADIUS + r.radius * 0.45,
+    f.radius + f.radialVelocity * dt);
+  const omega = Math.min(8.5, 26 / f.radius, f.angularMomentum / (f.radius * f.radius));
+  f.theta += omega * dt;
+  f.angularMomentum *= Math.exp(-0.045 * dt);
+  r.v = Math.max(8, tangentialSpeed);
+  const progress = THREE.MathUtils.clamp(
+    (f.funnel.outerRadius - f.radius) / (f.funnel.outerRadius - FUNNEL_DRAIN_RADIUS), 0, 1);
+  r.s = THREE.MathUtils.lerp(f.funnel.entryS, f.funnel.exitS - 1.2, progress);
+  if (f.radius <= FUNNEL_DRAIN_RADIUS + r.radius * 0.45 + 0.00001) {
+    r.mode = 'drain';
+    f.drainT = 0;
+    f.prevDrainT = 0;
+  }
+}
+
 function updateRacer(r, dt) {
   r.prevS = r.s;
   r.prevLane = r.lane;
   if (!r.alive || r.finished) return;
+  if (r.mode !== 'track') {
+    updateFunnelRacer(r, dt);
+    return;
+  }
+  for (const funnel of funnels) {
+    if (r.s >= funnel.entryS && r.s < funnel.exitS) {
+      enterFunnel(r, funnel);
+      return;
+    }
+  }
   const frame = frameAt(r.s);
   // A flared catch bell dips below the ordinary chute; its entrance adds
   // downhill acceleration and its exit naturally costs that potential energy.
   const bellSlope = (troughProfile(r.s + 0.75).dip - troughProfile(r.s - 0.75).dip) / 1.5;
   const downhill = -frame.tangent.y + bellSlope;
-  const acceleration = 1.9 + 21 * downhill - r.drag * r.v * Math.abs(r.v);
+  const sizeDrag = Math.pow(0.30 / r.radius, 0.9);
+  const acceleration = 1.4 + 29 * downhill - r.drag * sizeDrag * r.v * Math.abs(r.v);
   r.v += acceleration * dt;
-  r.v = THREE.MathUtils.clamp(r.v, 1.3, 18.5);
+  r.v = THREE.MathUtils.clamp(r.v, 1.3, 29.5);
   // Gravity restores marbles toward the bottom of the 90-degree circular
   // trough. Curvature and small individual variations keep the pack dynamic.
   const profile = troughProfile(r.s);
@@ -914,20 +1209,7 @@ function updateRacer(r, dt) {
       r.vl = side * Math.max(0, r.vl * side) * 0.45;
     }
   }
-  for (const mechanism of mechanismRotors) {
-    const feature = mechanism.feature;
-    if (Math.abs(r.s - feature.s) > r.radius + 0.7) continue;
-    const key = `${mechanism.type}-${feature.id}`;
-    if (raceTime - (r.lastFeatureHit[key] ?? -100) < 0.48) continue;
-    const phase = raceTime * feature.speed + feature.id * 0.93 + r.lane * 0.65;
-    const strike = Math.sin(phase);
-    if (Math.abs(strike) < 0.23) continue;
-    r.lastFeatureHit[key] = raceTime;
-    const impulse = (mechanism.type === 'spinner' ? 4.2 : 2.75) / Math.sqrt(r.mass);
-    r.vl += Math.sign(strike) * impulse;
-    r.v *= mechanism.type === 'spinner' ? 0.76 : 0.84;
-    r.s += 0.06;
-  }
+  for (const mechanism of mechanismRotors) impactMechanism(r, mechanism);
   for (let k = 0; k < obstacles.length; k++) {
     const o = obstacles[k];
     if (Math.abs(o.s - r.s) > r.radius + o.radius + 0.25) continue;
@@ -955,6 +1237,7 @@ function fixedUpdate(dt) {
   raceTime += dt;
   for (const racer of racers) updateRacer(racer, dt);
   resolveMarbleCollisions();
+  updateMechanisms(dt);
   if (raceTime >= MAX_RACE_SECONDS && !winner) finishRace(sortedRacers()[0]);
 }
 
@@ -1007,20 +1290,29 @@ function updateMarbleMeshes(dt, alpha) {
     const s = THREE.MathUtils.lerp(racer.prevS, racer.s, alpha);
     const lane = THREE.MathUtils.lerp(racer.prevLane, racer.lane, alpha);
     racer.visibleRadius += (racer.radius - racer.visibleRadius) * (1 - Math.exp(-dt * 13));
-    rollPosition.copy(marbleCenterAt(s, lane, racer.visibleRadius));
+    rollPosition.copy(racerPosition(racer, alpha));
     if (racer.lastRenderedPosition) {
-      const frame = frameAt(s);
-      const centerRadius = Math.max(0.75, troughProfile(s).radius - racer.visibleRadius);
-      const laneAngle = Math.asin(THREE.MathUtils.clamp(lane / centerRadius,
-        -Math.sin(TROUGH_HALF_ANGLE), Math.sin(TROUGH_HALF_ANGLE)));
-      rollSide.copy(frame.normal).multiplyScalar(Math.cos(laneAngle))
-        .addScaledVector(UP, Math.sin(laneAngle));
-      rollNormal.crossVectors(rollSide, frame.tangent).normalize();
+      if (racer.mode === 'funnel' && racer.funnelState) {
+        const f = racer.funnelState;
+        const radius = THREE.MathUtils.lerp(f.prevRadius, f.radius, alpha);
+        const theta = THREE.MathUtils.lerp(f.prevTheta, f.theta, alpha);
+        rollNormal.copy(funnelContactNormal(f.funnel, radius, theta));
+      } else if (racer.mode === 'drain') {
+        rollNormal.copy(UP);
+      } else {
+        const frame = frameAt(s);
+        const centerRadius = Math.max(0.75, troughProfile(s).radius - racer.visibleRadius);
+        const laneAngle = Math.asin(THREE.MathUtils.clamp(lane / centerRadius,
+          -Math.sin(TROUGH_HALF_ANGLE), Math.sin(TROUGH_HALF_ANGLE)));
+        rollSide.copy(frame.normal).multiplyScalar(Math.cos(laneAngle))
+          .addScaledVector(UP, Math.sin(laneAngle));
+        rollNormal.crossVectors(rollSide, frame.tangent).normalize();
+      }
       rollDisplacement.subVectors(rollPosition, racer.lastRenderedPosition);
-      // Contact-point velocity is tangent to the curved wooden surface.
+      // Spin is generated only by displacement along a contact surface.
       rollDisplacement.addScaledVector(rollNormal, -rollDisplacement.dot(rollNormal));
-      const rollingDistance = rollDisplacement.length();
-      if (rollingDistance > 0.00001) {
+      const rollingDistance = racer.mode === 'drain' ? 0 : rollDisplacement.length();
+      if (rollingDistance > 0.00001 && rollingDistance < 4) {
         rollAxis.crossVectors(rollNormal, rollDisplacement).normalize();
         const angle = rollingDistance / Math.max(0.1, racer.visibleRadius);
         rollQuaternion.setFromAxisAngle(rollAxis, angle);
@@ -1062,9 +1354,37 @@ function updateCamera(dt) {
   const racer = selectedRacer();
   if (!racer) return;
   const f = frameAt(racer.s);
-  const ballPos = marbleCenterAt(racer.s, racer.lane, racer.visibleRadius + 0.03);
+  const ballPos = racerPosition(racer, 1);
   const tangent = f.tangent;
-  if (cameraMode === 'onboard') {
+  if (cameraMode === 'tour') {
+    const target = FEATURE_MILESTONES[tourIndex];
+    const activeFunnel = funnels.find(item => Math.abs(item.bell.s - target.s) < 0.2);
+    const featureFrame = frameAt(target.s);
+    const focus = activeFunnel
+      ? activeFunnel.center.clone().addScaledVector(UP, -FUNNEL_DEPTH * 0.25)
+      : worldAt(target.s, 0, 2.0);
+    desiredCamera.copy(focus).addScaledVector(UP, activeFunnel ? 32 : 14)
+      .addScaledVector(featureFrame.tangent, -26)
+      .addScaledVector(featureFrame.normal, 15);
+    desiredLook.copy(focus);
+    camera.fov = THREE.MathUtils.damp(camera.fov, 65, 3, dt);
+  } else if ((racer.mode === 'funnel' || racer.mode === 'drain') && racer.funnelState) {
+    const f = racer.funnelState;
+    const orbitTangent = new THREE.Vector3(-Math.sin(f.theta), -0.18, Math.cos(f.theta)).normalize();
+    if (cameraMode === 'onboard') {
+      desiredCamera.copy(ballPos).addScaledVector(UP, 0.08);
+      desiredLook.copy(ballPos).addScaledVector(orbitTangent, 13);
+      camera.fov = THREE.MathUtils.damp(camera.fov, 88, 3, dt);
+    } else if (cameraMode === 'aerial') {
+      desiredCamera.copy(ballPos).addScaledVector(UP, 20).addScaledVector(orbitTangent, -9);
+      desiredLook.copy(f.funnel.center).addScaledVector(UP, -FUNNEL_DEPTH * 0.4);
+      camera.fov = THREE.MathUtils.damp(camera.fov, 65, 3, dt);
+    } else {
+      desiredCamera.copy(ballPos).addScaledVector(UP, 9).addScaledVector(orbitTangent, -13);
+      desiredLook.copy(ballPos).addScaledVector(orbitTangent, 5);
+      camera.fov = THREE.MathUtils.damp(camera.fov, 67, 3, dt);
+    }
+  } else if (cameraMode === 'onboard') {
     desiredCamera.copy(ballPos).addScaledVector(UP, 0.08);
     desiredLook.copy(worldAt(racer.s + 18, racer.lane, 1.4));
     camera.fov = THREE.MathUtils.damp(camera.fov, 83, 3, dt);
@@ -1075,7 +1395,7 @@ function updateCamera(dt) {
   } else {
     desiredCamera.copy(ballPos).addScaledVector(UP, 8.5).addScaledVector(tangent, -17).addScaledVector(f.normal, 10.0);
     desiredLook.copy(worldAt(racer.s + 9, racer.lane, 1.3));
-    camera.fov = THREE.MathUtils.damp(camera.fov, 57, 3, dt);
+    camera.fov = THREE.MathUtils.damp(camera.fov, 57 + Math.min(11, racer.v * 0.34), 3, dt);
   }
   camera.position.lerp(desiredCamera, 1 - Math.exp(-dt * (cameraMode === 'onboard' ? 4.5 : 2.3)));
   lookPoint.lerp(desiredLook, 1 - Math.exp(-dt * 2.9));
@@ -1104,9 +1424,21 @@ function updateHud() {
   const completion = racer => Math.round(THREE.MathUtils.clamp(racer.s / (trackLength - 2) * 100, 0, 100));
   if (selected && raceStatus !== 'finished') {
     const upcoming = FEATURE_MILESTONES.find(feature => feature.s > selected.s + 1);
-    calloutSubtitle.textContent = upcoming
-      ? `NEXT: ${upcoming.name} · ${Math.round(upcoming.s - selected.s)} units ahead`
-      : 'FINAL RUN TO THE CENTER FINISH';
+    if (cameraMode === 'tour') {
+      calloutTitle.textContent = 'TRACK TOUR';
+      calloutSubtitle.textContent = (tourIndex + 1) + '/' + FEATURE_MILESTONES.length +
+        ' · ' + FEATURE_MILESTONES[tourIndex].name + ' · TAP TOUR FOR NEXT';
+    } else if (selected.mode === 'funnel' && selected.funnelState) {
+      calloutTitle.textContent = 'SPIRALING INTO THE VORTEX';
+      const turns = (selected.funnelState.theta - selected.funnelState.startTheta) / TWO_PI;
+      calloutSubtitle.textContent = turns.toFixed(1) + ' revolutions · ' +
+        Math.round(selected.v) + ' units/s orbital speed';
+    } else {
+      calloutTitle.textContent = 'THE OAK RACE HALL';
+      calloutSubtitle.textContent = upcoming
+        ? 'NEXT: ' + upcoming.name + ' · ' + Math.round(upcoming.s - selected.s) + ' units ahead'
+        : 'FINAL RUN TO THE CENTER FINISH';
+    }
   }
   progressLeader.textContent = leader ? `LEADER ${leader.identity.name} · ${completion(leader)}%` : 'NO MARBLES';
   progressCurrent.textContent = selected ? `FOLLOWING ${selected.identity.name} · ${completion(selected)}%` : '';
@@ -1148,10 +1480,20 @@ for (const [i, identity] of IDENTITIES.entries()) {
 
 for (const button of document.querySelectorAll('[data-camera]')) {
   button.addEventListener('click', () => {
-    cameraMode = button.dataset.camera;
+    if (button.dataset.camera === 'tour' && cameraMode === 'tour') {
+      tourIndex = (tourIndex + 1) % FEATURE_MILESTONES.length;
+    } else {
+      cameraMode = button.dataset.camera;
+      if (cameraMode === 'tour') tourIndex = 0;
+    }
     document.querySelectorAll('[data-camera]').forEach(other => other.classList.toggle('active', other === button));
     onboardGlass.classList.toggle('active', cameraMode === 'onboard');
     if (cameraMode === 'onboard') showToast('ONBOARD MARBLE CAM', 1000);
+    if (cameraMode === 'tour') {
+      showToast('TRACK TOUR ' + (tourIndex + 1) + '/' + FEATURE_MILESTONES.length +
+        ' · ' + FEATURE_MILESTONES[tourIndex].name, 1800);
+    }
+    updateHud();
   });
 }
 
@@ -1160,6 +1502,11 @@ function restart() {
     scene.remove(effect.mesh);
     effect.mesh.geometry.dispose();
     effect.mesh.material.dispose();
+  }
+  for (const mechanism of mechanismRotors) {
+    mechanism.angle = 0;
+    mechanism.omega = 0;
+    mechanism.rotor.rotation.set(0, 0, 0);
   }
   createRacers();
   selectedId = 0;
@@ -1215,7 +1562,6 @@ function animate(now) {
   updateMarbleMeshes(elapsed, renderAlpha);
   updateProgressMarkers(renderAlpha);
   updateParticles(elapsed);
-  updateMechanisms();
   updateCamera(elapsed);
   if (now - lastHudTime > 150) { updateHud(); lastHudTime = now; }
   if (toastUntil && now > toastUntil) {
