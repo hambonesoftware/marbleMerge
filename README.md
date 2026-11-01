@@ -2,6 +2,10 @@
 
 A glossy 3D marble race down a long polished wooden trough, built using [Three.js](https://threejs.org/). Host it directly on GitHub Pages; no build step, accounts, or server are required.
 
+## Corrected physics version
+
+The latest geometry and physics corrections are at [Marble Merge v2.1](https://hambonesoftware.github.io/marbleMerge/v2/). See its [geometry review](v2/geometry-review.html) and [validation notes](v2/README.md). The original game below remains available.
+
 ## Play
 
 - **Follow** watches the chosen marble from a smooth chase camera.

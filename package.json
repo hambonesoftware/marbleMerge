@@ -1,0 +1,13 @@
+{
+  "name": "marble-merge",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "check": "node --check src/game.js && node --check v2/main.js",
+    "test": "node tests/physics.mjs"
+  },
+  "devDependencies": {
+    "three": "0.180.0",
+    "@dimforge/rapier3d-compat": "0.19.3"
+  }
+}
