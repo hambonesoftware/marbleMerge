@@ -33,6 +33,18 @@ jobs:
           npm ci
           npm run check
           npm test
+      - name: Install browser smoke test tooling
+        run: |
+          npm install --no-save --no-audit --no-fund @playwright/test@1.56.1
+          npx playwright install --with-deps chromium
+      - name: Verify mobile Broadcast HUD
+        run: npx playwright test -c playwright.config.js
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: marble-mobile-hud-qa
+          path: test-results/
+          if-no-files-found: ignore
       - name: Stage public game files
         run: |
           mkdir _site
