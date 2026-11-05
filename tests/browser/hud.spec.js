@@ -41,3 +41,18 @@ test("camera shortcut cycles the existing race camera handlers",async ({page})=>
   await page.locator("#hb-race-camera").click();
   await expect(page.locator(".camera-btn[data-camera='onboard']")).toHaveClass(/active/);
 });
+
+test("opening race options updates actual camera-safe rectangle",async({page})=>{
+  await page.goto("/");
+  await expect(page.locator("#loading")).toHaveClass(/hidden/,{timeout:45000});
+  await expect(page.locator(".hb-play")).toBeVisible();
+  const before=await page.locator("#app").evaluate(el=>parseFloat(el.style.getPropertyValue("--hb-safe-height")));
+  expect(before).toBeGreaterThan(0);
+  await page.locator("#hb-race-options").click();
+  await expect(page.locator(".hb-play__tray")).toBeVisible();
+  await expect.poll(async()=>{
+    return page.locator("#app").evaluate(el=>parseFloat(el.style.getPropertyValue("--hb-safe-height")));
+  }).toBeLessThan(before);
+  await page.locator(".hb-play__tray-close").click();
+  await expect(page.locator(".hb-play__tray")).toBeHidden();
+});

@@ -137,11 +137,15 @@ if (app && viewport && play && deck && raceClock && racing && merges) {
 
   // Expose the usable play rectangle as a CSS custom property for optional
   // camera-safe framing and HUD/viewport debugging.
+  hud.registerOccluder(document.querySelector(".race-progress"));
   hud.setSafeFrameCallback((rect) => {
     app.style.setProperty("--hb-safe-center-x", String(rect.centerX));
     app.style.setProperty("--hb-safe-center-y", String(rect.centerY));
     app.style.setProperty("--hb-safe-width", String(rect.width));
     app.style.setProperty("--hb-safe-height", String(rect.height));
+    window.dispatchEvent(new CustomEvent("hambone-play:safe-frame", {
+      detail: { centerX: rect.centerX, centerY: rect.centerY }
+    }));
   });
 
   // Explicitly do not intercept touch input on the track canvas.

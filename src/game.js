@@ -31,6 +31,20 @@ const TIER_COLORS = [0x65d9ff, 0xffc353, 0xff6385, 0x8cf19c, 0x8c8eff, 0xed85ff,
 const SWIRL_COLORS = [0xffde8b, 0x47d8e8, 0xfd6f8b, 0x175f63, 0x244cc7, 0xffca79, 0xf9d46b, 0x82fbd7];
 
 const viewport = document.querySelector('#viewport');
+// Camera-safe target from Hambone PLAY. Only changes the viewing angle,
+// never the marble positions, forces, merge simulation or race outcome.
+const hudFrame = { shiftX: 0, shiftY: 0 };
+const cameraRightForHud = new THREE.Vector3();
+const cameraUpForHud = new THREE.Vector3();
+const cameraForwardForHud = new THREE.Vector3();
+window.addEventListener("hambone-play:safe-frame", event => {
+  const frame = event.detail;
+  const width = viewport.clientWidth;
+  const height = viewport.clientHeight;
+  if (!frame || width <= 0 || height <= 0) return;
+  hudFrame.shiftX = THREE.MathUtils.clamp((frame.centerX / width - 0.5) * 2, -0.55, 0.55);
+  hudFrame.shiftY = THREE.MathUtils.clamp((frame.centerY / height - 0.5) * 2, -0.55, 0.55);
+});
 const loading = document.querySelector('#loading');
 const timeEl = document.querySelector('#time');
 const aliveEl = document.querySelector('#alive');
@@ -1396,6 +1410,17 @@ function updateCamera(dt) {
     desiredCamera.copy(ballPos).addScaledVector(UP, 8.5).addScaledVector(tangent, -17).addScaledVector(f.normal, 10.0);
     desiredLook.copy(worldAt(racer.s + 9, racer.lane, 1.3));
     camera.fov = THREE.MathUtils.damp(camera.fov, 57 + Math.min(11, racer.v * 0.34), 3, dt);
+  }
+  // Reframe the focal point into the portion not covered by HUD and options.
+  // Onboard mode keeps its natural forward-looking frame for orientation.
+  if (cameraMode !== 'onboard' && (hudFrame.shiftX || hudFrame.shiftY)) {
+    const distance = desiredCamera.distanceTo(desiredLook);
+    const halfHeight = distance * Math.tan(THREE.MathUtils.degToRad(camera.fov * 0.5));
+    cameraForwardForHud.subVectors(desiredLook, desiredCamera).normalize();
+    cameraRightForHud.crossVectors(cameraForwardForHud, UP).normalize();
+    cameraUpForHud.crossVectors(cameraRightForHud, cameraForwardForHud).normalize();
+    desiredLook.addScaledVector(cameraRightForHud, -hudFrame.shiftX * halfHeight * camera.aspect * 0.55);
+    desiredLook.addScaledVector(cameraUpForHud, hudFrame.shiftY * halfHeight * 0.55);
   }
   camera.position.lerp(desiredCamera, 1 - Math.exp(-dt * (cameraMode === 'onboard' ? 4.5 : 2.3)));
   lookPoint.lerp(desiredLook, 1 - Math.exp(-dt * 2.9));

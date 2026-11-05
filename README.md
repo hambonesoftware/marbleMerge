@@ -73,3 +73,8 @@ The new Broadcast treatment replaces the persistent banner and control deck with
 Toast events from the existing simulation appear as short race-call announcements. The entire HUD is framework-free and bundled in this repository under src/vendor/hambone-play, avoiding dependency on another site's network availability. The core's safe-frame calculation is available for later camera framing improvements.
 
 The existing V2 experience is unchanged; this pass targets the main Marble Merge Grand Prix route.
+
+
+### Adaptive 3D camera framing
+
+The Broadcast HUD registers its live race-position ribbon and tool tray as actual viewport occluders. The free rectangle is emitted to the game on a safe-frame event. The chase/aerial/tour camera offsets its aim smoothly within that free space; the onboard camera is intentionally unchanged to retain its natural forward-looking orientation. This adjustment is visual only and does not alter marble physics, obstacle contacts, scoring, or race progress.
