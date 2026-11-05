@@ -34,6 +34,13 @@ if (app && viewport && play && deck && raceClock && racing && merges) {
   const tools = document.createElement("div");
   tools.className = "hb-race-tools";
   while (deck.firstChild) tools.appendChild(deck.firstChild);
+  // Keep the controls attached to the document even when the tray is shut.
+  // game.js uses document.querySelector to find these same camera buttons.
+  const stash = document.createElement("div");
+  stash.className = "hb-race-stash";
+  stash.hidden = true;
+  app.appendChild(stash);
+  stash.appendChild(tools);
   const originalTransport = tools.querySelector(".transport");
   const reset = tools.querySelector("#reset-btn");
   const speed = tools.querySelector("#speed-btn");
@@ -61,6 +68,7 @@ if (app && viewport && play && deck && raceClock && racing && merges) {
   const drawerObserver = new MutationObserver(() => {
     trayOpen = !hud.nodes.tray.hidden;
     toolsButton.setAttribute("aria-expanded", String(trayOpen));
+    if (!trayOpen && tools.parentNode !== stash) stash.appendChild(tools);
   });
   drawerObserver.observe(hud.nodes.tray, { attributes: true, attributeFilter: ["hidden"] });
 
@@ -144,5 +152,6 @@ if (app && viewport && play && deck && raceClock && racing && merges) {
     colorObserver.disconnect();
     loadingObserver.disconnect();
     hud.destroy();
+    stash.remove();
   }, { once: true });
 }
