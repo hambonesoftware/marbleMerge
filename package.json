@@ -3,8 +3,8 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "check": "node --check src/game.js && node --check v2/main.js",
-    "test": "node tests/physics.mjs"
+    "check": "node --check src/game.js && node --check v2/main.js && node --check src/play-ui.js && node --check src/vendor/hambone-play/hambone-play.js",
+    "test": "node tests/physics.mjs && node --test tests/hud.test.mjs"
   },
   "devDependencies": {
     "three": "0.180.0",

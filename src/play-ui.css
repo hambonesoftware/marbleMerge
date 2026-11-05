@@ -1,0 +1,88 @@
+/* Hambone PLAY · Broadcast presentation for Marble Merge.
+   Reuses the existing camera buttons, transport and marble picker. */
+#app .hb-play--broadcast{
+  --hb-surface:rgba(25,27,25,.87);
+  --hb-outline:rgba(255,225,173,.27);
+  --hb-accent:#f1cc90;
+  --hb-hud-top:12px;
+  color:#f8f5e7;
+}
+#app .hb-play--broadcast .hb-play__scorebug{
+  left:calc(12px + env(safe-area-inset-left,0px));top:calc(10px + env(safe-area-inset-top,0px));
+  width:auto;min-height:48px;max-width:calc(100% - 86px);
+  background:linear-gradient(100deg,rgba(34,33,30,.95),rgba(28,35,33,.84));
+  border-color:#edc68d70;border-left-color:#f3cc8c;
+  padding:5px 12px;border-radius:4px;
+}
+#app .hb-play--broadcast .hb-play__identity{font-family:"Barlow Condensed",Impact,sans-serif;font-size:15px;line-height:.95;min-width:55px;color:#e6c28c;letter-spacing:.02em}
+#app .hb-play--broadcast .hb-play__readout-value{font-family:"Barlow Condensed",Impact,sans-serif;font-size:24px;font-weight:800}
+#app .hb-play--broadcast .hb-play__readout-label{font-size:9px;color:#ded9c9;letter-spacing:.04em}
+#app .hb-play--broadcast .hb-play__utilities{top:calc(10px + env(safe-area-inset-top,0px));right:calc(10px + env(safe-area-inset-right,0px))}
+#app .hb-play--broadcast .hb-play__utilities .hb-play__control{width:52px;min-width:52px;height:48px;min-height:48px;font-size:23px;padding:0;background:#2c302ce0;border-radius:7px}
+#app .hb-play--broadcast .hb-play__actions{justify-content:flex-end;bottom:calc(10px + env(safe-area-inset-bottom,0px));gap:7px}
+#app .hb-play--broadcast .hb-play__actions .hb-play__control{
+  min-height:52px;padding:10px 14px;border-radius:7px;
+  font-size:13px;font-weight:800;background:#293530e8;color:#fff6e2;border:1px solid #e6c48777;
+}
+#app .hb-play--broadcast .hb-play__actions #play-btn{
+  min-width:106px;flex:0 1 135px;background:#f1cd91;color:#2a2b26;
+  border:1px solid #f6e3b2;box-shadow:0 5px 19px #0009;
+  font-family:"Barlow Condensed",sans-serif;font-size:20px;font-weight:800;
+}
+#app .hb-play--broadcast .hb-play__actions #play-btn span{font-family:Inter,sans-serif;font-size:10px;letter-spacing:.05em}
+#app .hb-play--broadcast .hb-play__actions #hb-race-camera{font-family:Inter,sans-serif;font-size:11px}
+#app .hb-play--broadcast .hb-play__status{bottom:calc(72px + env(safe-area-inset-bottom,0px));border-radius:5px}
+#app .hb-play--broadcast .hb-play__announcement{
+  border-radius:3px;top:24%;font-family:"Barlow Condensed",Impact,sans-serif;
+  font-size:clamp(23px,5vw,38px);letter-spacing:.04em;border-color:#f4cc8b;
+  text-transform:uppercase;background:#262523e8
+}
+#app .hb-play--broadcast .hb-play__tray{
+  background:#222b2aef;border:1px solid #c6b490a6;border-radius:9px;
+  bottom:calc(76px + env(safe-area-inset-bottom,0px));max-height:min(65dvh,480px)
+}
+#app .hb-play--broadcast .hb-play__tray-head{border-bottom:1px solid #bda77b55;padding-bottom:8px;margin-bottom:10px}
+.hb-race-tools{display:flex;flex-direction:column;gap:15px}
+.hb-race-tools .control-group{display:flex;flex-direction:column;gap:9px}
+.hb-race-tools .control-name{color:#f0cc95;font-size:11px;letter-spacing:.08em}
+.hb-race-tools .color-choice{height:36px;width:36px;min-width:36px}
+.hb-race-tools .camera-options{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:7px}
+.hb-race-tools .camera-btn{height:43px;font-size:11px;color:#f6efe3;border:1px solid #9d997f6c}
+.hb-race-tools .camera-btn.active{color:#1e2927;background:#f0d49c;border-color:#fff0bb}
+.hb-race-tools .transport{display:flex;flex-direction:row;align-self:stretch;justify-content:flex-start;margin:0;padding:0;gap:9px}
+.hb-race-tools .utility-btn{min-width:74px;min-height:44px;background:#34403c;border:1px solid #9b9d8b;color:#fff3da;border-radius:8px;font-size:15px}
+.hb-race-tools .utility-btn:first-child::after{content:"  SPEED";font-size:10px;letter-spacing:.03em}
+.hb-race-tools .utility-btn:nth-child(2)::after{content:"  RESET";font-size:10px;letter-spacing:.03em}
+/* Progressive disclosure: the race has one minimalist scorebug, progress
+   ribbon and context actions. The old header/dashboard remain in the DOM so
+   the unchanged simulation can continue updating them. */
+.topbar,.control-deck,.bottom-note,.race-callout{display:none!important}
+.race-toast{display:none!important}
+.race-progress{
+  z-index:6;left:12px;right:12px;top:calc(67px + env(safe-area-inset-top,0px));
+  padding:2px 8px 1px;border-radius:5px;background:rgba(20,25,26,.62);
+  border:1px solid #cab99066;backdrop-filter:blur(5px);-webkit-backdrop-filter:blur(5px);
+  box-shadow:0 2px 12px #0006;
+}
+.progress-heading,.progress-scale{display:none!important}
+.progress-line{height:34px;margin:2px 12px}
+.progress-track{height:2px;opacity:.75}
+.progress-marble{width:11px;height:11px}
+.progress-marble.selected{outline-color:#fff5d7;outline-width:2px}
+#loading{z-index:60}
+@media(max-width:430px){
+ #app .hb-play--broadcast .hb-play__identity{font-size:12px;min-width:42px}
+ #app .hb-play--broadcast .hb-play__readouts{gap:8px}
+ #app .hb-play--broadcast .hb-play__readout-value{font-size:20px}
+ #app .hb-play--broadcast .hb-play__scorebug{padding:5px 9px}
+ .race-progress{top:calc(64px + env(safe-area-inset-top,0px));left:9px;right:9px}
+ .progress-line{height:30px}
+ #app .hb-play--broadcast .hb-play__actions #play-btn{min-width:92px;flex:0 1 112px}
+}
+@media(max-height:560px) and (orientation:landscape){
+ .race-progress{top:9px;left:220px;right:80px}
+ #app .hb-play--broadcast .hb-play__scorebug{max-width:190px}
+ #app .hb-play--broadcast .hb-play__readout:nth-child(n+3){display:none}
+ .progress-line{height:27px}
+ #app .hb-play--broadcast .hb-play__tray{max-height:calc(100dvh - 95px)}
+}

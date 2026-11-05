@@ -62,3 +62,14 @@ Serve the repository using any static server, for example `python -m http.server
 - **Ball-powered devices:** both axle wheels and horizontal spinners start stationary and receive angular momentum when marbles hit them. Rotational damping slows them down. Seesaw bridge and pendulum gates also move only on contact and spring back under gravity.
 - **Track Tour camera:** use the TRACK TOUR button, tapping again to advance through each module. Each station is marked by a visible arch and sign.
 - **Mobile performance:** no heavyweight physics dependency is required for this version. The general track uses fixed-step constrained motion, while funnels use a dedicated orbital simulation and mechanisms use angular impulse and damping. This is a physics-inspired hybrid rather than a general-purpose rigid-body solver.
+
+
+## Hambone PLAY — Broadcast HUD
+
+Marble Merge now uses **Hambone PLAY v1**, copied from the shared source at [Hambone Arcade / play/v1](https://github.com/hambonesoftware/arcade/tree/main/play/v1).
+
+The new Broadcast treatment replaces the persistent banner and control deck with a compact race clock/field/merges scorebug, a slim live marble-position ribbon, a one-tap camera switch and the original Pause/Resume control. The original marble color picker, camera choices, race speed and reset buttons live in an **OPTIONS** tray. Their existing game handlers remain attached, so this is an interface migration—not a rewrite of the fixed-step race physics.
+
+Toast events from the existing simulation appear as short race-call announcements. The entire HUD is framework-free and bundled in this repository under src/vendor/hambone-play, avoiding dependency on another site's network availability. The core's safe-frame calculation is available for later camera framing improvements.
+
+The existing V2 experience is unchanged; this pass targets the main Marble Merge Grand Prix route.
